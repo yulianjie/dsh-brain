@@ -34,6 +34,8 @@ for (const file of docs.filter(file => file.endsWith('.md'))) {
 }
 const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const lock = JSON.parse(await readFile(join(root, 'package-lock.json'), 'utf8'));
+assert.equal(manifest.name, lock.name);
+assert.equal(manifest.name, lock.packages[''].name);
 assert.equal(manifest.version, lock.version);
 assert.equal(manifest.version, lock.packages[''].version);
 assert.equal(manifest.license, 'Apache-2.0');

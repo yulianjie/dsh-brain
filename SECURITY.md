@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes target the latest revision of the **0.2.x** line on `main`. Older
+Security fixes target the latest revision of the **0.2.x** line of `@yulianjie/dsh-brain` on `main`. Older
 versions do not currently receive backports. This community project does not
 promise a response or remediation deadline.
 

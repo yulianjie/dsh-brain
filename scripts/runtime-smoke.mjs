@@ -4,7 +4,7 @@
 // Extracts ONLY executable package code from Desktop's app.asar to a disposable
 // directory, then tests those exact bundled services. No profile/auth/session files.
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,8 +47,17 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const llm = await load('dsh-llm');
   const loop = await load('dsh-agent-loop');
   const workingDirectory = await load('dsh-working-directory');
-  const { createIntegration, default: brainPlugin } = await import('../lib/index.js');
-  const { Brain } = await import('../lib/core.js');
+  const packageRoot = resolve(process.env.DSH_BRAIN_PACKAGE_DIR ?? fileURLToPath(new URL('../', import.meta.url)));
+  const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
+  const { createIntegration, default: brainPlugin } = await import(pathToFileURL(join(packageRoot, 'lib/index.js')));
+  const { Brain } = await import(pathToFileURL(join(packageRoot, 'lib/core.js')));
+  const packageLink = join(directory, 'node_modules', ...packageManifest.name.split('/'));
+  mkdirSync(dirname(packageLink), { recursive: true });
+  symlinkSync(packageRoot, packageLink, process.platform === 'win32' ? 'junction' : 'dir');
+  const { runInNewContext } = await import('node:vm');
+  let clientId;
+  runInNewContext(readFileSync(join(packageRoot, 'lib/client.js'), 'utf8'), { window: { __ModuleLoader__: { load(bundle) { clientId = bundle.id; } } } });
+  assert.equal(clientId, packageManifest.name);
   const ctx = new Context();
   const failures = [];
   ctx.on('internal/error', error => { failures.push(String(error)); console.error(error); });
@@ -158,7 +167,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   writeFileSync(profile.installAnchor, JSON.stringify({ name: 'dsh', version: '0.2.1-rc.3' }));
   writeFileSync(join(profileDir, 'package.json'), JSON.stringify({ name: 'brain-synthetic-settings', private: true, dsh: { profile: { bundles: [] } } }));
   writeFileSync(configPath, '[]\n');
-  writeFileSync(patchPath, JSON.stringify([{ insert: [{ id: 'brain', name: 'cordis:brain', config: { dataDir: join(directory, 'brain') } }] }]));
+  writeFileSync(patchPath, JSON.stringify([{ insert: [{ id: 'brain', name: packageManifest.name, config: { dataDir: join(directory, 'brain') } }] }]));
   const bootSettings = () => appBoot.boot('brain-smoke', configPath, appBoot.readProfilePatches('brain-smoke', profile), async host => {
     host.provide('profileContext', profile);
     host.plugin(prompt.default, {}); host.plugin(tools.default, { mode: 'native' });
@@ -166,7 +175,6 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
     host.plugin(projections.default); host.plugin(llm.default); host.plugin(loop.default, { agents: [], maxParallelToolCalls: 10 });
     host.plugin(TestFilesystem); host.plugin(workingDirectory.default, { defaultDirectory: directory });
     host.plugin(configEditor.default); host.plugin(settings.default);
-    host.loader.builtins.brain = brainPlugin;
   });
   const host = await bootSettings();
   const descriptor = () => host.settings.describe().find(item => item.ns === 'brain');
@@ -192,5 +200,5 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const restartedPersona = await restarted.personality();
   assert.equal(restartedPersona.frozen, true); assert.equal(restartedPersona.traits.verbosity, 0.45);
   await rebooted.fiber.dispose();
-  console.log(JSON.stringify({ ok: true, actualCordis: true, exportedPluginMounted: true, actualAgentLoop: true, actualWorkingDirectory: true, nativeTools: 5, nativeCommands: true, automaticFactExtraction: true, crossSessionRecall: true, workspaceIsolation: true, cwdChanges: true, gradualPersonality: true, persistedRestart: true, actualSettingsAPI: true, actualConfigEditor: true, actualLoaderVolatileUpdate: true, editableFields: 20, invalidPairRejectedBeforePersistence: true, settingsPersistedRestart: true, learnedPersonalityPreserved: true, calls, extractions }));
+  console.log(JSON.stringify({ ok: true, packageName: packageManifest.name, packageVersion: packageManifest.version, scopedLoaderResolution: true, clientModuleIdentity: true, actualCordis: true, exportedPluginMounted: true, actualAgentLoop: true, actualWorkingDirectory: true, nativeTools: 5, nativeCommands: true, automaticFactExtraction: true, crossSessionRecall: true, workspaceIsolation: true, cwdChanges: true, gradualPersonality: true, persistedRestart: true, actualSettingsAPI: true, actualConfigEditor: true, actualLoaderVolatileUpdate: true, editableFields: 20, invalidPairRejectedBeforePersistence: true, settingsPersistedRestart: true, learnedPersonalityPreserved: true, calls, extractions }));
 }

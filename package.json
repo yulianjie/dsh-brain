@@ -1,6 +1,6 @@
 {
-  "name": "dsh-brain",
-  "version": "0.2.0",
+  "name": "@yulianjie/dsh-brain",
+  "version": "0.2.1",
   "description": "Local long-term memory and gradual, user-controlled conversation style for DeepSeek Harness Desktop",
   "repository": {
     "type": "git",
@@ -51,6 +51,10 @@
     "node": ">=22"
   },
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "keywords": [
     "deepseek-harness",
     "cordis",

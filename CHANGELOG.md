@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 — 2026-10-27
+
+First public GitHub and npm release, distributed as `@yulianjie/dsh-brain`.
+The unscoped npm name `dsh-brain` belongs to a different project.
+
+### Packaging and migration
+
+- Align the scoped package name, Cordis bundle, browser module ID, native settings
+  slots and uninstall target; the CLI remains `dsh-brain` and the store schema is unchanged.
+- Refuse scripted installation alongside the older local unscoped package to avoid
+  duplicate `brain` entries. Uninstall the local package first and keep the same data directory.
+- Provide an installable npm tarball and SHA256 checksum with the GitHub Release.
 
 ### Open-source preparation
 
@@ -31,5 +42,5 @@
 - Cordis plugin, five model tools, `/brain` commands, local CLI and Windows
   Desktop installation/uninstallation scripts.
 
-These dates describe local development milestones. They do not imply that an npm
-package or GitHub Release was published on those dates.
+Versions 0.1.0 and 0.2.0 were local development milestones, not public releases
+of this project on npm. Version 0.2.1 is the first public release.

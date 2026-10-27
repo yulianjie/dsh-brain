@@ -25,7 +25,7 @@
 
 ## 兼容性
 
-当前版本 `0.2.0`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
+当前版本 `0.2.1`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
 
 | 层级 | 支持与验证范围 |
 | --- | --- |
@@ -36,7 +36,36 @@
 
 ## 安装与卸载
 
-前提：安装目标版本 DeepSeek Harness Desktop、Node.js 22+、npm 与 Git。源码无需编译；首次安装依赖需要访问 npm registry。当前以源码打包方式安装，以下命令不依赖已发布到 npm 的同名包。
+正式包名为 **`@yulianjie/dsh-brain`**。npm 上不带 scope 的 `dsh-brain` 属于其他项目，请勿混用。前提：目标版本 DeepSeek Harness Desktop；独立管理 CLI 需要 Node.js 22+。已有本项目 0.1.0/0.2.0 本地包时，先按下方迁移说明移除旧包。
+
+### 从 npm 安装（推荐）
+
+在 PowerShell 中调用 Desktop 自带 CLI；不要使用全局 npm 安装的其他版本 DSH：
+
+```powershell
+$dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.2.1'
+```
+
+只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.2.1`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
+
+### 从 GitHub Release 安装
+
+从 [v0.2.1 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.2.1) 下载 `yulianjie-dsh-brain-0.2.1.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
+
+```powershell
+$expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.2.1.tgz -Algorithm SHA256).Hash
+if ($actual -ne $expected) { throw 'SHA256 mismatch' }
+tar -xf .\yulianjie-dsh-brain-0.2.1.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz
+```
+
+安装仍需下载 npm 依赖；tarball 未内置 `node_modules`。
+
+### 从源码安装
+
+另需 Git、Node.js 22+ 与 npm。源码无需编译：
 
 ```powershell
 git clone https://github.com/yulianjie/dsh-brain.git
@@ -44,10 +73,10 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\dsh-brain-0.2.0.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz
 ```
 
-重启 Desktop 后，在插件列表确认 `dsh-brain`，再用 `/brain status` 检查状态。可以先用 `/brain remember global 我喜欢中文回答` 保存一条明确偏好，并通过 `/brain list global` 查看。
+重启 Desktop 后，在插件列表确认 `@yulianjie/dsh-brain`，再用 `/brain status` 检查状态。可以先用 `/brain remember global 我喜欢中文回答` 保存一条明确偏好，并通过 `/brain list global` 查看。
 
 脚本默认调用 `%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd`，执行宿主支持的 `dsh plugin --profile desktop add <tarball>`。没有传 `-PackagePath` 时先在源码目录运行 `npm pack`。安装后重启 Desktop，插件随 profile 加载；脚本不会结束正在运行的 Desktop 进程。
 
@@ -55,7 +84,7 @@ npm.cmd pack
 
 ```powershell
 .\scripts\install.ps1 -DryRun
-.\scripts\install.ps1 -PackagePath .\dsh-brain-0.2.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
@@ -67,7 +96,15 @@ npm.cmd pack
 .\scripts\uninstall.ps1
 ```
 
+从 Release 解压安装时，脚本路径为 `.\package\scripts\uninstall.ps1`；也可以调用 `& $dshCli plugin --profile desktop remove '@yulianjie/dsh-brain'`。
+
 卸载保留记忆文件。需要彻底移除数据时，先导出并确认实际 `dataDir`，关闭使用该存储的实例后，再自行删除对应目录。
+
+### 从旧本地包迁移
+
+本项目旧本地包的名称为 `dsh-brain`。先导出记忆备份并保留现有 profile 配置，再使用 Desktop 自带 CLI 对同一个 profile 执行 `plugin --profile desktop remove dsh-brain`，之后安装 scoped 包并正常重启 Desktop。不要从 npm 安装旧的不带 scope 的名称。安装脚本发现旧依赖时会停止，避免两个 bundle 争用 `id: brain`。
+
+本版本保持 `id: brain`、默认数据路径与 schemaVersion=1；保持相同 `DSH_HOME` / `dataDir` 即可继续使用原有记忆、风格与历史。自定义 `id: brain` 配置覆盖应保留。迁移不会自动删除旧数据，也不会自动停止 Desktop。
 
 ## 日常使用
 
@@ -142,7 +179,7 @@ node .\bin\brain.mjs --data-dir "$env:TEMP\brain-sandbox" remember "合成测试
 
 ## 配置与存储
 
-安装后进入 Desktop 的“插件 → 已安装 → dsh-brain”，在插件详情页直接调整原生配置表单。插件行详情也提供同一表单。20 个常用设置分为“学习与注入”“交流风格”“手动交流风格”“提取模型”“后台限制”“存储与上下文”六组，使用宿主设置服务保存到当前 profile，不需要另开网页。
+安装后进入 Desktop 的“插件 → 已安装 → @yulianjie/dsh-brain”，在插件详情页直接调整原生配置表单。插件行详情也提供同一表单。20 个常用设置分为“学习与注入”“交流风格”“手动交流风格”“提取模型”“后台限制”“存储与上下文”六组，使用宿主设置服务保存到当前 profile，不需要另开网页。
 
 修改先保存在表单草稿中，点击“保存”后生效；保存中禁用编辑，非法数值和不完整模型路由会禁用保存。每项带说明和默认值恢复入口，保存失败保留草稿供修正；离开表单会丢弃未保存草稿。已接受的设置由宿主持久化，下次启动继续使用。
 

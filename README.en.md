@@ -36,13 +36,45 @@ currently a 0.x project targeting a specific prerelease host API.
 | Native UI and CLI help | Currently Chinese; commands and configuration keys are stable identifiers |
 
 Core CI coverage does not establish native Desktop support on Linux/macOS.
-Other host versions need separate verification. The package version is **0.2.0**.
+Other host versions need separate verification. The package version is **0.2.1**.
 
-## Install from source
+## Install
+
+The official package name is **`@yulianjie/dsh-brain`**. The unscoped npm name
+`dsh-brain` belongs to another project. The management command remains `dsh-brain`.
+
+### From npm
+
+Use Desktop's bundled CLI, not an unrelated global DSH installation:
+
+```powershell
+$dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.2.1'
+```
+
+To install only the standalone management CLI, run
+`npm install -g @yulianjie/dsh-brain@0.2.1`, then `dsh-brain --help`.
+This global CLI installation does not register the Desktop plugin.
+
+### From GitHub Release
+
+Download `yulianjie-dsh-brain-0.2.1.tgz` and `SHA256SUMS.txt` from
+[v0.2.1](https://github.com/yulianjie/dsh-brain/releases/tag/v0.2.1) into one directory:
+
+```powershell
+$expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.2.1.tgz -Algorithm SHA256).Hash
+if ($actual -ne $expected) { throw 'SHA256 mismatch' }
+tar -xf .\yulianjie-dsh-brain-0.2.1.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz
+```
+
+Installation still downloads dependencies; the tarball does not bundle `node_modules`.
+
+### From source
 
 Install the target Desktop version, Git and Node.js/npm first. No compilation is
-needed. Dependencies are downloaded from the npm registry. These steps use a local
-tarball and do not assume that this package has been published to npm.
+needed. Dependencies are downloaded from the npm registry.
 
 ```powershell
 git clone https://github.com/yulianjie/dsh-brain.git
@@ -50,23 +82,37 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\dsh-brain-0.2.0.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz
 ```
 
-Restart Desktop normally. Open the installed `dsh-brain` plugin and run
+Restart Desktop normally. Open the installed `@yulianjie/dsh-brain` plugin and run
 `/brain status`. The installer calls Desktop's bundled `dsh plugin --profile desktop
 add <tarball>`; it does not stop the running application or rewrite profile YAML.
 Use `-DshCli <path>` for another installation, `-Profile` for another profile,
 `-DshHome` for an isolated home, and `-DryRun` to inspect the intended operation.
 
 ```powershell
-.\scripts\install.ps1 -PackagePath .\dsh-brain-0.2.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
 For the default profile, uninstall with `.\scripts\uninstall.ps1`. Uninstallation
 preserves memory data. Export it before intentionally removing the verified data
-directory, and stop all writers first.
+directory, and stop all writers first. From an extracted Release package use
+`.\package\scripts\uninstall.ps1`, or run
+`& $dshCli plugin --profile desktop remove '@yulianjie/dsh-brain'`.
+
+### Migrating from a local 0.1.0/0.2.0 package
+
+Export your memory and keep a profile configuration backup. Remove the old local
+package with Desktop's bundled `plugin --profile desktop remove dsh-brain`, then
+install the scoped package and restart Desktop normally. Do not install the
+unrelated unscoped package from npm. The installer refuses a profile still depending
+on the old unscoped name to avoid duplicate `brain` entries.
+
+Keep the same `DSH_HOME` and `dataDir`. The plugin row ID `brain`, data path and
+schemaVersion=1 are unchanged; memory, learned style, history and row configuration
+overrides are retained. Installation does not stop Desktop or delete the store.
 
 ## Everyday use
 
@@ -149,7 +195,7 @@ data causes an error and is preserved. Do not remove a lock while its writer liv
 ## Management CLI
 
 Use the source CLI, or install the local tarball globally with
-`npm install -g ./dsh-brain-0.2.0.tgz` to obtain `dsh-brain`. Use a matching
+`npm install -g ./yulianjie-dsh-brain-0.2.1.tgz` to obtain `dsh-brain`. Use a matching
 `--data-dir` to manage the same store as Desktop. Except help, successful commands
 return JSON; errors go to stderr with a nonzero exit status.
 

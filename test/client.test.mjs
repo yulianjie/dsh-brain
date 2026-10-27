@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { Config, DEFAULTS } from '../lib/config.js';
 
 const source = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8');
+const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 // Native primitive stand-ins expose registration/render/controller boundaries.
 // Persistence semantics are tested against the real Host in settings smoke/UI.
 class NativeForm {
@@ -18,7 +19,7 @@ class NativeForm {
 }
 const primitives = { SettingsFormModel: NativeForm, SettingsForm: 'NativeSettingsForm', SettingsValueField: 'NativeValueField', Switch: 'NativeSwitch', Button: 'NativeButton' };
 let client;
-vm.runInNewContext(source, { window: { __ModuleLoader__: { load(bundle) { assert.equal(bundle.id, 'dsh-brain'); client = bundle.factory(name => name === 'react' ? { createElement: (type, props, ...children) => ({ type, props: props ?? {}, children }) } : primitives); } } } });
+vm.runInNewContext(source, { window: { __ModuleLoader__: { load(bundle) { assert.equal(bundle.id, manifest.name); client = bundle.factory(name => name === 'react' ? { createElement: (type, props, ...children) => ({ type, props: props ?? {}, children }) } : primitives); } } } });
 const json = Config.toJSON();
 const fields = client.fieldsFromSchema(json);
 const find = key => fields.find(field => field.key === key);
@@ -67,7 +68,7 @@ test('installed package and row detail slots use Host brain namespace without du
     slots: { inject(name, register) { return register(); }, register(options, component) { registered.push({ options, component }); return () => disposed.push(options.name); } },
   };
   client.apply(ctx);
-  assert.deepEqual(registered.map(item => [item.options.name, item.options.key]), [['plugins.bundle.config', 'dsh-brain'], ['plugins.row.config', 'dsh-brain#brain']]);
+  assert.deepEqual(registered.map(item => [item.options.name, item.options.key]), [['plugins.bundle.config', manifest.name], ['plugins.row.config', `${manifest.name}#brain`]]);
   assert.equal(registered[0].component, client.BrainConfigCard);
   assert.doesNotMatch(source, /https?:|window\.open|remote\.|fetch\(|setPersonality/);
   effects.forEach(dispose => dispose()); assert.equal(disposed.length, 3);

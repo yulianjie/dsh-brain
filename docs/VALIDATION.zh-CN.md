@@ -1,5 +1,16 @@
 # DSH Brain 验证记录
 
+## v0.2.1 发布候选验证（2026-10-27）
+
+- 包身份改为 `@yulianjie/dsh-brain@0.2.1`；服务器 bundle、客户端模块 ID、原生配置插槽和卸载目标一致，CLI 仍为 `dsh-brain`。
+- `npm run verify`：59/59 行为测试通过；实际 scoped tarball 的临时安装、插件导入和 CLI 持久化通过。
+- 在独立 `DSH_HOME` / `release-check` profile 使用 Desktop bundled CLI 安装 tarball；组合配置包含 scoped 插件，profile 保留基础 bundle。
+- 设置 `DSH_BRAIN_PACKAGE_DIR` 指向该 profile 的已安装包，真实 bundled runtime 0.2.1-rc.3 smoke 通过；验证 scoped loader 解析、客户端模块 ID、20 项原生设置、保存/重启、跨会话召回和工作区隔离。
+- 从旧本地 0.2.0 tarball 迁移：安装脚本阻止两种名称共存；移除旧包再安装 scoped 包后，`maxContextMemories: 7` 合成覆盖保留，合成记忆、风格和冻结状态文件 SHA256 完全不变。
+- 卸载 scoped 包后，合成记忆文件 SHA256 不变，基础 bundle 保留，插件 bundle 移除。
+
+所有安装验证均使用独立合成目录，未变更日常 Desktop profile。本版本未重新操作原生窗口、未调用真实网络模型。最终 CI、公开附件下载校验与 npm 发布后验证结果见 [v0.2.1 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.2.1)。
+
 ## 开源整理复验（2026-10-27）
 
 环境：Windows、Node.js v24.14.1、npm 11.14.0、Desktop bundled runtime 0.2.1-rc.3。

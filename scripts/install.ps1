@@ -12,6 +12,14 @@ $ErrorActionPreference = 'Stop'
 if ($Profile -notmatch '^[a-zA-Z0-9][a-zA-Z0-9_-]*$') { throw 'Profile must contain only letters, digits, underscores, or hyphens.' }
 if (-not (Test-Path -LiteralPath $DshCli -PathType Leaf)) { throw "Desktop bundled CLI not found: $DshCli. Supply -DshCli explicitly for another installation." }
 $projectRoot = Split-Path -Parent $PSScriptRoot
+$effectiveHome = if ($DshHome) { $DshHome } elseif ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.dsh' }
+$profileManifest = Join-Path ([IO.Path]::GetFullPath($effectiveHome)) "profiles\$Profile\package.json"
+if (Test-Path -LiteralPath $profileManifest -PathType Leaf) {
+    $profilePackage = Get-Content -LiteralPath $profileManifest -Raw | ConvertFrom-Json
+    if ($profilePackage.dependencies.PSObject.Properties.Name -contains 'dsh-brain') {
+        throw "Legacy unscoped dsh-brain is installed in profile '$Profile'. Remove that local package with the Desktop bundled CLI before installing @yulianjie/dsh-brain. Keep the same dataDir; memory data is retained. See README migration instructions."
+    }
+}
 if ($PackagePath) {
     $PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
     if ([IO.Path]::GetExtension($PackagePath) -ne '.tgz') { throw 'PackagePath must be a packaged npm .tgz file.' }

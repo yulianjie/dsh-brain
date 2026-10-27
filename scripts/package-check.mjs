@@ -29,7 +29,7 @@ try {
     assert.doesNotMatch(name, /(?:^|\/)(?:brain\.json(?:\..*)?|\.env(?:\..*)?|node_modules|artifacts|\.git|\.brain\.lock)(?:\/|$)|\.(?:tgz|pem|key|log)$/i);
   }
   run(process.execPath, [npm, 'install', '--prefix', directory, '--ignore-scripts', '--no-audit', '--no-fund', join(directory, pack.filename)], directory);
-  const installed = join(directory, 'node_modules', 'dsh-brain');
+  const installed = join(directory, 'node_modules', ...manifest.name.split('/'));
   const packageJson = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
   assert.equal(packageJson.version, manifest.version);
   assert.equal(packageJson.license, 'Apache-2.0');

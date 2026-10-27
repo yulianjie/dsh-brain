@@ -8,6 +8,7 @@ artifacts/
 coverage/
 brain.json
 brain.json.*
+brain-backup*.json
 .brain.lock/
 .env
 .env.*

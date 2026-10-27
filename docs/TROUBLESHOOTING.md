@@ -10,7 +10,7 @@ store. CLI commands other than help may initialize an empty store if none exists
 | PowerShell blocks `npm.ps1` | Use `npm.cmd`; changing the system execution policy is unnecessary. |
 | `Desktop bundled CLI not found` | Check the Desktop installation and pass `-DshCli` to install/uninstall. Do not substitute a global CLI and assume identical APIs. |
 | Installed plugin does not appear | Confirm the target profile, restart Desktop normally, and check that its bundled runtime matches the documented target. An isolated test profile is not the daily Desktop profile. |
-| Settings form does not appear | Confirm package 0.2.0, a complete `lib/client.js`, and a compatible host. The client companion and host settings services are both required. |
+| Settings form does not appear | Confirm scoped package @yulianjie/dsh-brain 0.2.1, a complete `lib/client.js`, and a compatible host. The client companion and host settings services are both required. |
 | Settings cannot be saved | Check numeric ranges, read-only state, and provider/model pairing. Both route fields must be empty or populated. Retry after resolving concurrent edits; unsaved drafts are not persistent. |
 | A memory is missing | Check `dataDir`, `DSH_HOME`, workspace path, injection switches, search wording and context budgets. CLI `list` without `--workspace` only shows global records. Moving a project changes its workspace key. |
 | Automatic learning stops | Check `autoLearn`, root-turn completion, queue counters and model routing. Timeouts fall back to explicit phrases; a provider ignoring cancellation occupies the single model slot until it settles. |
