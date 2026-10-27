@@ -1,0 +1,32 @@
+name: Bug report / 问题反馈
+description: Report a reproducible problem with synthetic, redacted examples.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "请勿粘贴真实记忆、聊天记录、认证信息或私人路径。For vulnerabilities, use the private reporting link in SECURITY.md."
+  - type: input
+    id: versions
+    attributes:
+      label: Versions and platform / 版本与平台
+      description: DSH Brain, Desktop bundled runtime, Node.js, OS; include the profile type but no private paths.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction / 复现步骤
+      description: Use synthetic input and an isolated data directory.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior / 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted diagnostics / 已脱敏的诊断信息
+      description: Relevant error text or test output; never attach brain.json or an unredacted export.

@@ -1,0 +1,75 @@
+{
+  "name": "dsh-brain",
+  "version": "0.2.0",
+  "description": "Local long-term memory and gradual, user-controlled conversation style for DeepSeek Harness Desktop",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yulianjie/dsh-brain.git"
+  },
+  "homepage": "https://github.com/yulianjie/dsh-brain#readme",
+  "bugs": {
+    "url": "https://github.com/yulianjie/dsh-brain/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./core": "./lib/core.js",
+    "./extraction": "./lib/extraction.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "bin": {
+    "dsh-brain": "bin/brain.mjs"
+  },
+  "files": [
+    "lib/",
+    "bin/",
+    "scripts/install.ps1",
+    "scripts/uninstall.ps1",
+    "docs/",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:cli": "node --test test/cli.test.mjs test/package.test.mjs",
+    "test:runtime": "node scripts/runtime-smoke.mjs",
+    "check": "node scripts/check.mjs",
+    "pack:check": "node scripts/package-check.mjs",
+    "verify": "npm run check && npm test && npm run pack:check"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "deepseek-harness",
+    "cordis",
+    "memory",
+    "personality"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ]
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.18.5"
+  }
+}
