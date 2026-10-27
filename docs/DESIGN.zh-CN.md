@@ -2,6 +2,10 @@
 
 设计始于 2026-10-26，更新于 2026-10-27。目标 Desktop bundled runtime 为 0.2.1-rc.3；实际验收范围见[验证记录](VALIDATION.zh-CN.md)。本文说明当前设计和行为约束，开发方式见[贡献指南](../CONTRIBUTING.md)。
 
+## 2026-10-27：上下文与稳定性改进
+
+当前工作区新增全局核心偏好召回、查询预览/全文分页、字符与估算 Token 双预算、单个当前参考消息和近期风格共识。设计依据、迁移边界、缓存取舍与验收见[调研与改进评估](MEMORY-CONTEXT-REVIEW.zh-CN.md)。新设置总数为 23；旧版本验收记录中的 20 项保留为历史记录。
+
 ## 2026-10-27：原生插件配置界面
 
 常用配置通过宿主原生设置通道提供：服务端导出带 volatile 字段的 Config，客户端通过原生插件详情页的配置插槽和 configForms 显示表单、暂存修改、保存、校验及错误状态。仅声明 Config 并不能保证当前 rc.3 客户端显示表单，必须同时交付客户端模块。
@@ -20,7 +24,7 @@
 
 为 DeepSeek Harness Desktop 提供可安装插件，让普通聊天积累长期记忆，并逐渐形成可解释、可控制的交流风格。性格指持久的语言行为偏好，不声称模型具有意识或真实情感。
 
-1. 原生插件在 Desktop bundled runtime 中成功加载，prompt、工具、根会话结束钩子实际有效。
+1. 原生插件在 Desktop bundled runtime 中成功加载，模型请求参考消息、工具、根会话结束钩子实际有效。
 2. 新会话能够召回旧会话的持久信息；全局偏好可共享，工作区事实不跨项目泄漏。
 3. 普通聊天可自动提取记忆和风格反馈；提取使用已有 llm 服务，异步有界队列、超时、去重，不阻塞主对话。
 4. 多个独立用户轮次的明确风格反馈逐渐改变 personality；单次反馈不能导致剧烈变化。查看、冻结、重置、历史、回退可用。
@@ -40,8 +44,10 @@
 ## 结构
 
 - `lib/core.js`：纯 Node 核心 Brain 类，存储、记忆、检索、人格状态、历史；不依赖宿主。
+- `lib/context.js`：宿主当前参考消息替换、旧共享快照分节迁移、token 计量事件。
+- `lib/budget.js`：不依赖模型的 token 估算和 Unicode 安全输出预算。
 - `lib/extraction.js`：结构化提取协议、校验、证据约束、中文/英文明确偏好的离线兜底。
-- `lib/index.js`：Cordis apply，systemPrompt.context、tools、commands、agent 回合事件、llm 服务适配。
+- `lib/index.js`：Cordis apply，agent/request 参考消息替换、tools、commands、agent 回合事件、llm 服务适配。
 - `lib/config.js`：原生 schema、默认值、范围校验、模型路由成对校验与 volatile 读取。
 - `lib/client.js`：由宿主 ModuleLoader 加载的原生设置客户端；不能直接在 Node 中导入执行。
 - `bin/brain.mjs`：本地管理 CLI；提供服务不可用时的人工控制。
@@ -57,10 +63,11 @@
 
 `new Brain({ dataDir, maxMemories?, maxContextChars?, ... })`，`await brain.init()`。
 
-所有方法返回 Promise，除 `context({workspace,query})` 是同步只读快照（给同步 prompt provider）。
+所有方法返回 Promise，除 `context({workspace,query})` 是同步只读快照（给请求前的参考消息生成）。
 
 - `remember({text, kind?, scope:'global'|'workspace', workspace?, source?, confidence?, id?, key?})` → record；id 指定时修改，key 用于语义合并。
 - `list({scope?,workspace?})`、`search({query,workspace?,limit?})` → record[]；未提供 workspace 时不暴露 workspace 记录。
+- `memoryPage({query?,scope?,workspace?,cursor?,limit?})` → 有预算的预览页；`readMemory({id,workspace?,cursor?})` → 精确正文分段。
 - `forget({id,workspace?})` → boolean。
 - `learn({sessionId,turnId,workspace,userText,assistantText?,extraction?})` → 学习结果；可直接使用受校验的模型 extraction 或离线明确反馈提取。
 - `personality()` → 包含维度、冻结状态、证据计数的快照。
@@ -70,13 +77,13 @@
 
 提取结果统一为 `{memories:[{text,kind,scope,key?,confidence,evidence}],feedback:[{trait,value,confidence,evidence}]}`；trait 为 warmth、verbosity、humor、proactivity、formality，value 为 [0,1] 目标值。evidence 必须是当前 userText 的逐字片段；模型输出和工具输出不作为用户偏好证据。禁止根据人口学特征推断风格。
 
-每个 trait 至少 3 个独立 turn 的有效反馈才自动更新，单轮 delta <= 0.05；范围 [0,1]，默认中性；保持有限证据和变更历史、去重 turn。冻结时不积攒日后突然生效的漂移。人工设置立即生效。
+每个 trait 最近最多 5 次反馈中至少 3 个独立 turn、至少 75% 同向支持且最新反馈也同向才自动更新；取支持值中位数为目标，单轮 delta <= 0.05，目标距离 <= 0.05 时不微调；范围 [0,1]，默认中性；保持有限证据和变更历史、去重 turn。冻结时不积攒日后突然生效的漂移。人工设置立即生效。
 
 ## 聊天集成
 
-启动时加载状态；根 agent 回合结束时只取本轮用户文本，排除 subagent、工具、runtime context。后台提取最多一个模型调用每轮，限制输入长度、并发、队列、超时；不能无限重试或递归生成 agent。凭据走宿主 llm，不另读 auth 文件。prompt 注入使用 `interpolate:false`，把记忆作为有来源的参考数据，保留用户当前指令优先。workspace 必须从该 agent/session 的 cwd 获取，不能用插件进程 cwd 代替。
+启动时加载状态；根 agent 回合结束时只取本轮用户文本，排除 subagent、工具、runtime context。后台提取最多一个模型调用每轮，限制输入长度、并发、队列、超时；不能无限重试或递归生成 agent。凭据走宿主 llm，不另读 auth 文件。`agent/request` 在宿主准备模型请求时生成有来源的低优先级参考消息，文本不走模板插值。使用原生单节点 surface replacement 保留一个当前快照，写入相邻的 tokenMeter 计量事件供宿主重放和用量统计。原始日志不删除，旧共享 runtime 快照只移除 Brain 分节。保留用户当前指令优先。workspace 必须从该 agent/session 的 cwd 获取，不能用插件进程 cwd 代替。
 
-模型工具使用 brain_ 前缀：搜索、列表、记住、遗忘、性格查看；破坏性人格控制和导入导出由用户 `/brain` 命令或 CLI 完成。`/brain` 支持 help/status/list/search/remember/forget/personality/freeze/unfreeze/reset/history/rollback；复杂导入导出由 CLI 提供。
+模型工具使用 brain_ 前缀：搜索、列表、按 ID 分段读全文、记住、遗忘、性格查看；破坏性人格控制和导入导出由用户 `/brain` 命令或 CLI 完成。`/brain` 支持 help/status/list/search/remember/forget/personality/freeze/unfreeze/reset/history/rollback；复杂导入导出由 CLI 提供。
 
 ## 验证策略
 

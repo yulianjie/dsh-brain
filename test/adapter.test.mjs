@@ -115,8 +115,8 @@ test('autoLearn disabled preserves query-aware prompt recall without invoking mo
   await state.brain.remember({ text: 'ORBIT manifests', scope: 'workspace', workspace: state.dataDir });
   await state.brain.remember({ text: 'NEBULA artifacts', scope: 'workspace', workspace: state.dataDir });
   state.handlers.get('agent/inbox/claimed')({ agent: state.agent, turn: 1, message: input('NEBULA') });
-  const text = state.contexts[0].text({ agent: state.agent });
-  assert.ok(text.includes('NEBULA')); assert.ok(!text.includes('ORBIT')); assert.equal(state.contexts[0].interpolate, false);
+  const text = state.contextFor(state.agent);
+  assert.ok(text.includes('NEBULA')); assert.ok(!text.includes('ORBIT')); assert.equal(state.contexts.length, 0);
   state.handlers.get('session/event')(state.agent.session, { type: 'turn/end', seq: 1, data: { turn: 1, reason: { kind: 'completed' } } });
   await state.learner.flush(); assert.equal(state.calls(), 0);
 });
@@ -140,12 +140,12 @@ test('live cwd change cannot reattribute initial user evidence to another worksp
 
 test('corrupt storage skips prompt context with one warning and preserves corrupt bytes', async t => {
   const state = await setup(t); await writeFile(state.brain.file, '{corrupt', 'utf8');
-  assert.equal(state.contexts[0].text({ agent: state.agent }), ''); assert.equal(state.contexts[0].text({ agent: state.agent }), '');
+  assert.equal(state.contextFor(state.agent), ''); assert.equal(state.contextFor(state.agent), '');
   assert.equal(state.warnings.length, 1); await assert.rejects(state.brain.stats());
 });
 
 test('native command and tool definitions use current runtime contract', async t => {
-  const state = await setup(t); assert.equal(state.tools.size, 5);
+  const state = await setup(t); assert.equal(state.tools.size, 6);
   const command = state.commands.get('brain'); assert.equal(command.recordInput, false);
   const result = await command.handler({ agent: state.agent, rawInput: 'remember workspace Project uses ORBIT' });
   assert.equal(result.kind, 'success');
@@ -153,6 +153,30 @@ test('native command and tool definitions use current runtime contract', async t
   assert.ok(output.includes('ORBIT')); assert.deepEqual(state.tools.get('brain_search').output.render({}, output), [{ type: 'text', text: output }]);
   const error = await command.handler({ agent: state.agent, rawInput: 'personality verbosity=oops' }); assert.equal(error.kind, 'error');
   assert.equal(await apply(state.ctx, { dataDir: join(state.dataDir, 'second') }), undefined);
+});
+
+test('model memory tools preserve global scope, paginate previews and read exact text', async t => {
+  const state = await setup(t, { maxToolResultChars: 512, maxToolResultTokens: 128 });
+  const call = async (name, args) => JSON.parse(await state.tools.get(name).execute(args, { agent: state.agent }));
+  const saved = await call('brain_remember', { text: '我喜欢中文回答。' });
+  assert.equal(saved.scope, 'global');
+  assert.deepEqual(Object.keys(saved).sort(), ['id', 'saved', 'scope']);
+  const privateRecord = await call('brain_remember', { text: '本项目使用 Rust。' });
+  assert.equal(privateRecord.scope, 'workspace');
+  const globals = await call('brain_list', { scope: 'global' });
+  assert.equal(globals.total, 1); assert.equal(globals.records[0].id, saved.id);
+  assert.equal((await call('brain_read', { id: saved.id })).text, '我喜欢中文回答。');
+  const text = 'Unicode 中文😀 '.repeat(110);
+  const long = await call('brain_remember', { text, scope: 'global' });
+  let cursor, reconstructed = '';
+  do {
+    const output = await state.tools.get('brain_read').execute({ id: long.id, ...(cursor ? { cursor } : {}) }, { agent: state.agent });
+    assert.ok(output.length <= 512);
+    const result = JSON.parse(output); reconstructed += result.text; cursor = result.nextCursor;
+  } while (cursor);
+  assert.equal(reconstructed, text.trim());
+  state.agent.session.header.cwd = join(state.dataDir, 'other');
+  await assert.rejects(call('brain_read', { id: privateRecord.id }), /scope/);
 });
 
 test('human controls freeze/reset/history/rollback/manual traits are available', async t => {
@@ -186,7 +210,7 @@ test('feedback captured before a manual control cannot drift personality after d
 
 test('native Config exposes labeled volatile fields and validates complete route pairs', () => {
   const fields = Object.entries(Config.dict).filter(([, schema]) => schema.meta.volatile);
-  assert.equal(fields.length, 20); assert.equal(Config.dict.dataDir.meta.volatile, undefined);
+  assert.equal(fields.length, 23); assert.equal(Config.dict.dataDir.meta.volatile, undefined);
   assert.ok(fields.every(([, schema]) => schema.meta.description && schema.meta.help && schema.meta.group));
   assert.ok(Config['~standard'].validate({ extractionProvider: 'only-provider' }).issues);
   assert.ok(Config['~standard'].validate({ extractionModel: 'only-model' }).issues);
@@ -209,12 +233,12 @@ test('native stable refs change context policy and limits without writing learne
   updateVolatile(refs.manualVerbosity, createVolatile(0.2));
   updateVolatile(refs.maxContextChars, createVolatile(3000));
   await state.handlers.get('loader/volatile-update')([['injectMemories'], ['personalityMode'], ['manualVerbosity'], ['maxContextChars']]);
-  const context = state.contexts[0].text({ agent: state.agent });
+  const context = state.contextFor(state.agent);
   assert.ok(context.includes('"mode":"manual"')); assert.ok(context.includes('"verbosity":0.2')); assert.ok(!context.includes('ORBIT'));
   assert.equal(state.brain.maxContextChars, 3000);
   assert.deepEqual(await state.brain.exportData(), stored);
   updateVolatile(refs.personalityMode, createVolatile('adaptive'));
-  await state.syncConfig(); assert.ok(state.contexts[0].text({ agent: state.agent }).includes('"verbosity":0.35'));
+  await state.syncConfig(); assert.ok(state.contextFor(state.agent).includes('"verbosity":0.35'));
   assert.deepEqual(await state.brain.exportData(), stored);
 });
 

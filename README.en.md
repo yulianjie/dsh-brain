@@ -21,7 +21,7 @@ currently a 0.x project targeting a specific prerelease host API.
   tokens and Chinese bigrams. No vector database or separate memory server is needed.
 - Adjusts warmth, verbosity, humor, proactivity and formality gradually, with manual
   overrides, freeze/reset, history and rollback.
-- Provides 20 native Desktop settings, `/brain` commands, five model tools and a
+- Provides 23 native Desktop settings, `/brain` commands, six model tools and a
   standalone management CLI.
 - Stores inspectable JSON with atomic replacement, cross-process write locking,
   import/export and deletion markers that resist resurrection from old backups.
@@ -36,7 +36,7 @@ currently a 0.x project targeting a specific prerelease host API.
 | Native UI and CLI help | Currently Chinese; commands and configuration keys are stable identifiers |
 
 Core CI coverage does not establish native Desktop support on Linux/macOS.
-Other host versions need separate verification. The package version is **0.2.1**.
+Other host versions need separate verification. The package version is **0.3.0**.
 
 ## Install
 
@@ -49,24 +49,24 @@ Use Desktop's bundled CLI, not an unrelated global DSH installation:
 
 ```powershell
 $dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
-& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.2.1'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.3.0'
 ```
 
 To install only the standalone management CLI, run
-`npm install -g @yulianjie/dsh-brain@0.2.1`, then `dsh-brain --help`.
+`npm install -g @yulianjie/dsh-brain@0.3.0`, then `dsh-brain --help`.
 This global CLI installation does not register the Desktop plugin.
 
 ### From GitHub Release
 
-Download `yulianjie-dsh-brain-0.2.1.tgz` and `SHA256SUMS.txt` from
-[v0.2.1](https://github.com/yulianjie/dsh-brain/releases/tag/v0.2.1) into one directory:
+Download `yulianjie-dsh-brain-0.3.0.tgz` and `SHA256SUMS.txt` from
+[v0.3.0](https://github.com/yulianjie/dsh-brain/releases/tag/v0.3.0) into one directory:
 
 ```powershell
 $expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
-$actual = (Get-FileHash .\yulianjie-dsh-brain-0.2.1.tgz -Algorithm SHA256).Hash
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.3.0.tgz -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'SHA256 mismatch' }
-tar -xf .\yulianjie-dsh-brain-0.2.1.tgz
-.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz
+tar -xf .\yulianjie-dsh-brain-0.3.0.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.3.0.tgz
 ```
 
 Installation still downloads dependencies; the tarball does not bundle `node_modules`.
@@ -82,7 +82,7 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.3.0.tgz
 ```
 
 Restart Desktop normally. Open the installed `@yulianjie/dsh-brain` plugin and run
@@ -92,7 +92,7 @@ Use `-DshCli <path>` for another installation, `-Profile` for another profile,
 `-DshHome` for an isolated home, and `-DryRun` to inspect the intended operation.
 
 ```powershell
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.3.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
@@ -138,19 +138,43 @@ Say “Please remember: I prefer replies in English”, or use explicit commands
 
 Prefix each command with `/brain`. An omitted `remember` scope uses the current
 session workspace when available, otherwise global. Model tools are `brain_search`,
-`brain_list`, `brain_remember`, `brain_forget` and `brain_personality`. Import/export
+`brain_list`, `brain_read`, `brain_remember`, `brain_forget` and `brain_personality`. Import/export
 and destructive style controls are reserved for user commands or the local CLI.
 
 Automatic learning does not scan old conversations or import another agent's
 memory. It ignores assistant text, tool output and subagent turns. Workspace
 identity comes from the session directory; renaming or moving it changes that key.
 
+## Memory retrieval and context limits
+
+Global memories are shared across sessions and workspaces using the same data
+store, not across separate users, stores or devices. Save explicit cross-project
+preferences with `/brain remember global I prefer Chinese replies`. Automatic
+recall includes a small budgeted set of global preferences even for unrelated
+queries, followed by relevant global and current-workspace facts.
+
+`brain_list` and `brain_search` return `{records,total,nextCursor}` previews and
+accept `scope`, `limit` (1..20, default 10) and `cursor`. Use `brain_read({id,cursor?})`
+to read exact text in bounded chunks. Cursors expire when their visible results change and cannot be reused across
+queries or workspaces. Unrelated turn counters and persona updates do not expire them. Local CLI list/export remain complete.
+
+One current Brain reference message is durably replaced before model requests.
+Old log events remain available; legacy runtime snapshots lose only their Brain
+section. This prevents automatic snapshot accumulation, but does not bound other
+plugins, conversation history or accumulated tool results. Replacing an earlier
+message can reduce prompt-prefix cache reuse. Token estimates are heuristics,
+not exact billing or model-window guarantees. `/brain status` reports budgets and
+the process's last generated context usage. See the
+[research and evaluation](docs/MEMORY-CONTEXT-REVIEW.zh-CN.md).
+
 ## Communication style
 
 Five traits range from 0 to 1 with a neutral default of 0.5. Higher values mean
 warmer, more detailed, more humorous, more proactive or more formal responses.
-Automatic changes require at least three independent explicit feedback turns per
-trait and move at most 0.05 per turn. Repeated events do not count twice. Freezing
+Automatic changes require at least three independent turns and 75% agreement in
+the latest five feedback entries, with the newest feedback supporting the same
+direction. Changes move at most 0.05 per turn, with a 0.05 deadband. Project-only
+and temporary feedback cannot change the global persona. Repeated events do not count twice. Freezing
 does not accumulate a backlog of changes. Manual settings apply immediately.
 
 - `adaptive`: inject learned style and learn when the relevant switches allow it.
@@ -179,6 +203,8 @@ configuration remains in the profile patch, outside the UI.
 | `extractionMaxChars`, `extractionMaxQueue` | `8000` user-text characters, `16` queued turns |
 | `maxMemories` | `500`; lowering it does not delete records |
 | `maxContextChars`, `maxContextMemories` | `6000` total context characters, `10` recalled records |
+| `maxContextTokens` | `2000` estimated tokens; 0 disables automatic injection |
+| `maxToolResultChars`, `maxToolResultTokens` | `6000` characters / `2000` estimated tokens per tool page |
 | `lockTimeoutMs` | `15000` milliseconds |
 
 The full ranges and patch examples are in the [Chinese configuration reference](README.md#配置与存储).
@@ -195,7 +221,7 @@ data causes an error and is preserved. Do not remove a lock while its writer liv
 ## Management CLI
 
 Use the source CLI, or install the local tarball globally with
-`npm install -g ./yulianjie-dsh-brain-0.2.1.tgz` to obtain `dsh-brain`. Use a matching
+`npm install -g ./yulianjie-dsh-brain-0.3.0.tgz` to obtain `dsh-brain`. Use a matching
 `--data-dir` to manage the same store as Desktop. Except help, successful commands
 return JSON; errors go to stderr with a nonzero exit status.
 

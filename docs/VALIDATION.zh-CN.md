@@ -1,5 +1,21 @@
 # DSH Brain 验证记录
 
+## v0.3.0：记忆与性格上下文改进（2026-10-27）
+
+当前源码版本为 0.3.0；功能代码已安装到日常 desktop profile，并完成原生设置与真实聊天验收。测试环境为 Windows、Node.js 24.14.1、Desktop bundled agent-loop 0.2.1-rc.3 / Cordis 4.0.5。调研与设计评估见[记忆与性格改进评估](MEMORY-CONTEXT-REVIEW.zh-CN.md)。
+
+- `npm run verify`：语法、文档链接与包元数据检查，67 项测试及 tarball 干净安装检查通过。新 tarball 包含 28 个文件，新增预算及上下文模块可正常导入；CLI 使用临时合成目录。
+- `node scripts/runtime-smoke.mjs`：加载实际 app.asar 中的 227 个运行时包，包括 tokenMeter；模型使用合成 provider，不读取用户 profile 或调用网络模型。
+- 30 轮真实 agent-loop 请求：每次只有 **1 个当前 Brain 参考消息**，该样本最大 **774 字符**；证据计数变化不重写参考内容。其他普通聊天消息仍正常累积。
+- 真实宿主验证：全局偏好跨工作区召回、工作区切换后的当前参考隔离、旧共享快照只清理 Brain 分节、持久会话重放、压缩移除参考后恢复、重复参考收敛为一份、关闭注入后清除旧内容。
+- tokenMeter 测量与宿主 contextBreakdown 投影统计一致，验证相邻替换计量事件；原生设置服务覆盖 23 项、volatile 更新、重启恢复和已有性格状态保留。
+- 500 条长合成记忆：完整分页遍历、不重复 ID、输出字符和估算 token 双限、中文/emoji/转义正文无损读取。最小工具预算仍可前进；跨范围、查询、工作区及结果变更后的旧游标拒绝使用；普通聊天计数和性格变化不中断分页。
+- 性格评估：24 次交替矛盾反馈保持中性；一致反馈按每次最多 0.05 收敛；单次反向反馈不延续旧方向；冻结/manual/off、临时/项目反馈、普通聊天不产生全局漂移。
+
+真实聊天验收（Asia/Singapore 2026-10-27）：当前 DeepSeek-V4.1-Flash 完成 brain_list、brain_search、brain_remember、brain_read、brain_personality；第二个新会话读回合成全局校验码。通过本地管理清理唯一合成记录，再由真实模型调用 brain_forget 确认 forgotten=false、brain_search 确认 total=0。临时要求简短回答后，五个性格数值仍为原值，风格证据仍为零。验收前后原有 memories/personality/history 逐字段一致，cordis.yml 与 cordis.patch.yml 的 SHA256 一致；仅增加四个正常轮次去重记录和两个合成记录删除标记。原生页面显示 23 项设置、一个 brain 组件运行中。
+
+验证边界：没有真实网络模型长期风格遵循率测试或其他宿主版本兼容性结论。自动参考的预算不包含其他插件、对话历史或累计工具结果，估算 token 不代表模型精确计费。
+
 ## v0.2.1 发布候选验证（2026-10-27）
 
 - 包身份改为 `@yulianjie/dsh-brain@0.2.1`；服务器 bundle、客户端模块 ID、原生配置插槽和卸载目标一致，CLI 仍为 `dsh-brain`。

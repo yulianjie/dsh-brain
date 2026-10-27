@@ -14,7 +14,7 @@
 - **跨会话记忆**：全局偏好与工作区事实分开检索，支持中英文、纠正合并及删除去重。
 - **有证据的自动学习**：只处理已完成根轮次的用户文本，限制模型调用、超时与后台队列。
 - **可控交流风格**：五维渐进调整，以及自动、手动、关闭模式；支持冻结、历史和回退。
-- **原生配置与管理**：Desktop 中的 20 项设置、`/brain` 命令、五个模型工具和本地 CLI。
+- **原生配置与管理**：Desktop 中的 23 项设置、`/brain` 命令、六个模型工具和本地 CLI。
 - **可检查的本地存储**：JSON、原子替换、并发锁、导入导出；无独立数据库服务。
 
 自动提取和召回仍会使用宿主模型上下文；“本地存储”不等于“完全离线”。详见[数据边界](#数据边界与限制)。
@@ -25,7 +25,7 @@
 
 ## 兼容性
 
-当前版本 `0.2.1`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
+当前版本 `0.3.0`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
 
 | 层级 | 支持与验证范围 |
 | --- | --- |
@@ -44,21 +44,21 @@
 
 ```powershell
 $dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
-& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.2.1'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.3.0'
 ```
 
-只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.2.1`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
+只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.3.0`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
 
 ### 从 GitHub Release 安装
 
-从 [v0.2.1 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.2.1) 下载 `yulianjie-dsh-brain-0.2.1.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
+从 [v0.3.0 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.3.0) 下载 `yulianjie-dsh-brain-0.3.0.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
 
 ```powershell
 $expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
-$actual = (Get-FileHash .\yulianjie-dsh-brain-0.2.1.tgz -Algorithm SHA256).Hash
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.3.0.tgz -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'SHA256 mismatch' }
-tar -xf .\yulianjie-dsh-brain-0.2.1.tgz
-.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz
+tar -xf .\yulianjie-dsh-brain-0.3.0.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.3.0.tgz
 ```
 
 安装仍需下载 npm 依赖；tarball 未内置 `node_modules`。
@@ -73,7 +73,7 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.3.0.tgz
 ```
 
 重启 Desktop 后，在插件列表确认 `@yulianjie/dsh-brain`，再用 `/brain status` 检查状态。可以先用 `/brain remember global 我喜欢中文回答` 保存一条明确偏好，并通过 `/brain list global` 查看。
@@ -84,7 +84,7 @@ npm.cmd pack
 
 ```powershell
 .\scripts\install.ps1 -DryRun
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.2.1.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.3.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
@@ -129,9 +129,22 @@ npm.cmd pack
 | `/brain history` | 查看有限变更历史 |
 | `/brain rollback <version>` | 回退到已有历史版本 |
 
-`remember` 省略范围时，有会话工作区则使用 `workspace`，否则使用 `global`。模型也可调用 `brain_search`、`brain_list`、`brain_remember`、`brain_forget`、`brain_personality` 五个工具。导入导出和破坏性风格控制由用户命令或本地 CLI 执行。
+`remember` 省略范围时，有会话工作区则使用 `workspace`，否则使用 `global`。模型也可调用 `brain_search`、`brain_list`、`brain_read`、`brain_remember`、`brain_forget`、`brain_personality` 六个工具。导入导出和破坏性风格控制由用户命令或本地 CLI 执行。
 
 范围边界：全局偏好可用于所有项目；工作区事实仅提供给路径相同的会话。工作区由宿主会话 cwd 获取，不使用插件进程的 cwd 猜测。它按目录路径隔离，工作区改名或迁移后需要重新整理记录。
+
+## 全局记忆与按需读取
+
+全局指同一 `DSH_HOME` / `dataDir` 内跨会话、跨工作区共享，不代表云同步或跨用户共享。使用 `/brain remember global 我喜欢中文回答` 明确保存；工作区事实使用 `/brain remember workspace 本项目使用 Rust`。自动提取和模型工具会识别明确的个人偏好与项目限定；显式工具 `scope` 优先。命令省略范围时仍沿用当前工作区默认。
+
+自动上下文先选少量全局 `preference` / `instruction`，使语言等偏好在无关键词重合时仍可用，再检索全局事实与当前工作区内容。最多 3 条常驻候选且不超过总条数预算的约三分之一；无关全局偏好最多使用约三分之一的估算 Token 预算。长记录提供最多 400 个 Unicode 码点的预览，可按 ID 取全文。更多偏好仍可通过工具检索，并非全部常驻。
+
+- `brain_list` / `brain_search` 支持 `scope`、`limit`（1..20，默认 10）、`cursor`，返回 `{records,total,nextCursor}`。预览的 `truncated:true` 表示正文尚未完整读取。
+- `brain_read({id,cursor?})` 返回 `{id,scope,text,nextCursor}`，逐页拼接 `text` 可获得原文。工作区权限对全文读取同样生效。
+- 可见结果内容或顺序变化后游标会失效；普通聊天计数与性格变化不影响分页；收到 stale cursor 错误时重新从第一页读取。游标不能跨查询或工作区复用。
+- `/brain status` 显示预算和本插件进程最近一次生成的上下文用量；本地 CLI/list/export 保持完整输出。
+
+这些限制约束自动参考消息与单次工具结果，不能限制整段对话、其他插件或累计工具历史。查询变化时替换较早消息可能降低提示词前缀缓存命中率。完整调研、权衡和验证见[记忆与性格改进评估](docs/MEMORY-CONTEXT-REVIEW.zh-CN.md)。
 
 ## 风格如何变化
 
@@ -145,9 +158,9 @@ npm.cmd pack
 | `proactivity` | 更主动提供建议 |
 | `formality` | 更正式 |
 
-同一维度至少需要 **3 个独立轮次**的有效明确反馈才能自动变化，每轮变化不超过 `0.05`。重复事件不会重复计数；冻结期间不积攒稍后突然生效的漂移。人工设置立即生效，历史最多保留 100 条，每维度反馈证据最多保留 20 条。不能根据人口学信息推断交流风格。
+同一维度最近最多 5 次有效反馈中，至少 **3 个独立轮次且不少于 75%** 支持同一方向，最新反馈也同向，才自动变化；每轮变化不超过 `0.05`，距离目标不超过 `0.05` 时停止微调。矛盾反馈不取平均后继续漂移；项目专属或临时风格要求不改变全局性格。重复事件不会重复计数；冻结期间不积攒稍后突然生效的漂移。人工设置立即生效，历史最多保留 100 条，每维度反馈证据最多保留 20 条。不能根据人口学信息推断交流风格。
 
-模型提取支持有用户原文证据的明确风格反馈，包括固定表达之外的语义反馈。本地兜底只识别有限的中英文表达，例如“以后回答简洁一点”“回复可以更温暖”“不要开玩笑”，可能漏掉同义表达。原始风格反馈可以在列表中查看，但不会作为立即生效的偏好原句注入，避免绕过逐步变化和冻结控制。
+模型提取支持有用户原文证据的明确风格反馈，包括固定表达之外的语义反馈。本地兜底只识别有限的中英文表达，例如“以后回答简洁一点”“回复可以更温暖”“不要开玩笑”，可能漏掉同义表达。自动学习的全局风格反馈可以在列表中查看，但不会作为立即生效的偏好原句注入，避免绕过逐步变化和冻结控制。
 
 ## 本地管理 CLI
 
@@ -179,7 +192,7 @@ node .\bin\brain.mjs --data-dir "$env:TEMP\brain-sandbox" remember "合成测试
 
 ## 配置与存储
 
-安装后进入 Desktop 的“插件 → 已安装 → @yulianjie/dsh-brain”，在插件详情页直接调整原生配置表单。插件行详情也提供同一表单。20 个常用设置分为“学习与注入”“交流风格”“手动交流风格”“提取模型”“后台限制”“存储与上下文”六组，使用宿主设置服务保存到当前 profile，不需要另开网页。
+安装后进入 Desktop 的“插件 → 已安装 → @yulianjie/dsh-brain”，在插件详情页直接调整原生配置表单。插件行详情也提供同一表单。23 个常用设置分为“学习与注入”“交流风格”“手动交流风格”“提取模型”“后台限制”“存储与上下文”六组，使用宿主设置服务保存到当前 profile，不需要另开网页。
 
 修改先保存在表单草稿中，点击“保存”后生效；保存中禁用编辑，非法数值和不完整模型路由会禁用保存。每项带说明和默认值恢复入口，保存失败保留草稿供修正；离开表单会丢弃未保存草稿。已接受的设置由宿主持久化，下次启动继续使用。
 
@@ -225,6 +238,9 @@ node .\bin\brain.mjs --data-dir "$env:TEMP\brain-sandbox" remember "合成测试
 | `extractionMaxQueue` | `16` | 后台等待队列上限，范围 1..128 |
 | `maxMemories` | `500` | 总记忆条数上限，范围 1..100000；降低不会删除已有记录 |
 | `maxContextChars` | `6000` | 注入上下文总字符上限，含说明与风格，范围 0..50000 |
+| `maxContextTokens` | `2000` | 注入估算 Token 上限，范围 0..16000；0 停止注入，不是模型精确 token 数 |
+| `maxToolResultChars` | `6000` | 模型记忆工具每页字符上限，范围 512..50000 |
+| `maxToolResultTokens` | `2000` | 模型记忆工具每页估算 Token 上限，范围 128..16000 |
 | `maxContextMemories` | `10` | 每次注入记忆条数上限，范围 0..100 |
 | `lockTimeoutMs` | `15000` | 写锁等待时间，范围 0..120000 毫秒 |
 
@@ -232,7 +248,7 @@ node .\bin\brain.mjs --data-dir "$env:TEMP\brain-sandbox" remember "合成测试
 
 ## 数据边界与限制
 
-记忆作为标明来源的低优先级参考数据注入，采用 `interpolate:false`，当前用户指令优先。系统限制条数和总长度；检索使用英文词和中文字二元组，不是向量数据库。自动提取要求逐字用户证据，持久化证据原句，避免把模型改写中的猜测存为事实。
+记忆作为独立的低优先级参考消息注入，文本不经过模板插值，当前用户指令优先。每个模型请求最多保留一个当前 Brain 快照，通过宿主持久化 surface replacement 更新；磁盘事件历史保留原文。升级时只清理旧共享快照中的 Brain 命名分节，其他插件内容保留。系统同时限制条数、字符和估算 Token；检索使用英文词和中文字二元组，不是向量数据库。自动提取要求逐字用户证据，持久化证据原句，避免把模型改写中的猜测存为事实。
 
 明显的 API key、Bearer token、密码赋值、私钥和含密码 URL 会被过滤；这是启发式过滤，不能识别所有秘密。不要主动要求插件记住敏感凭据。插件不会上传独立记忆库，但自动提取通过当前宿主模型处理本轮用户文本，后续被召回的记忆也会进入宿主正常模型上下文。
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — 2026-10-27
+
+- Keep a single current Brain reference on the model-visible session surface;
+  preserve durable history, other runtime sections, and host token accounting.
+- Add bounded global preference recall, paginated memory previews and `brain_read`
+  chunks with result-bound cursors and workspace isolation.
+- Add estimated token budgets alongside character limits (23 native settings).
+- Stabilize adaptive style using recent consensus, a deadband and deterministic
+  values for recognized phrases; project-only feedback cannot change global style.
+- Add adversarial memory/style tests, a 30-turn bundled runtime audit, replay and
+  compaction checks, and a sourced design evaluation.
+
 ## 0.2.1 — 2026-10-27
 
 First public GitHub and npm release, distributed as `@yulianjie/dsh-brain`.

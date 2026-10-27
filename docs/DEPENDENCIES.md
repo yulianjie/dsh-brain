@@ -15,7 +15,9 @@ their own license files. When redistributing dependencies together with the
 project, retain their original license and attribution files. Recheck this table
 against the lockfile when updating dependencies.
 
-Desktop provides Cordis, the agent/session/LLM services, React and UI primitives.
+Desktop provides Cordis, the agent/session/LLM services, `tokenMeter`, React and UI primitives.
+The context integration targets Desktop runtime 0.2.1-rc.3 and requires its
+durable single-node surface replacement and token metering contracts.
 These host packages are not vendored or redistributed here. The optional runtime
 smoke script reads executable packages from a locally installed Desktop into a
 temporary directory and removes that directory afterward. It does not copy host
