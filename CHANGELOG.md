@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1 — 2026-10-27
+
+- Fix first-turn reference ordering: queue the initial Brain message through
+  pre-step, after the host's protected system head, instead of appending during
+  request preparation. Later updates still replace only the Brain node.
+- Validate every runtime smoke turn with the host's strict persisted-log codec,
+  including a regression that rejects the 0.3.0 ordering bug.
+- 0.3.0 is withdrawn: its in-memory replay test missed a stricter disk restore
+  invariant. Upgrade before creating new conversations.
+
 ## 0.3.0 — 2026-10-27
 
 - Keep a single current Brain reference on the model-visible session surface;

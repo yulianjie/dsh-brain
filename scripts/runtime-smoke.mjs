@@ -16,7 +16,7 @@ if (process.argv[2] !== '--inside') {
   const extractor = join(directory, 'extract.cjs');
   writeFileSync(extractor, `const fs=require('fs'),path=require('path'),Module=require('module');
 const source=${JSON.stringify(archive)}, target=${JSON.stringify(join(directory, 'node_modules'))};
-const todo=['@deepseek-ai/cordis','@deepseek-ai/dsh-system-prompt','@deepseek-ai/dsh-tools','@deepseek-ai/dsh-commands','@deepseek-ai/dsh-agent','@deepseek-ai/dsh-agent-loop','@deepseek-ai/dsh-llm','@deepseek-ai/dsh-session','@deepseek-ai/dsh-session-projection','@deepseek-ai/dsh-token-meter','@deepseek-ai/dsh-working-directory','@deepseek-ai/dsh-settings','@deepseek-ai/dsh-config-editor','@deepseek-ai/dsh-app-boot'];
+const todo=['@deepseek-ai/cordis','@deepseek-ai/dsh-system-prompt','@deepseek-ai/dsh-tools','@deepseek-ai/dsh-commands','@deepseek-ai/dsh-agent','@deepseek-ai/dsh-agent-loop','@deepseek-ai/dsh-llm','@deepseek-ai/dsh-session','@deepseek-ai/dsh-session-format-catalog','@deepseek-ai/dsh-session-projection','@deepseek-ai/dsh-token-meter','@deepseek-ai/dsh-working-directory','@deepseek-ai/dsh-settings','@deepseek-ai/dsh-config-editor','@deepseek-ai/dsh-app-boot'];
 const done=new Set();let files=0;
 function copy(from,to){fs.mkdirSync(to,{recursive:true});for(const entry of fs.readdirSync(from,{withFileTypes:true})){const a=path.join(from,entry.name),b=path.join(to,entry.name);if(entry.isDirectory()){if(entry.name!=='node_modules')copy(a,b);}else{const value=fs.readFileSync(a);fs.writeFileSync(b,value);files++;if(/\\.[cm]?js$/.test(entry.name)){const text=value.toString();const re=/(?:from\\s*|import\\s*\\(|require\\s*\\()?["'](@[a-zA-Z0-9_.-]+\\/[a-zA-Z0-9_.-]+|[a-zA-Z][a-zA-Z0-9_.-]*)(?:\\/[^"']*)?["']/g;for(const m of text.matchAll(re)){const n=m[1];if(!Module.isBuiltin(n)&&fs.existsSync(path.join(source,n,'package.json')))todo.push(n);}}}}}
 while(todo.length){const name=todo.shift();if(done.has(name))continue;done.add(name);copy(path.join(source,name),path.join(target,name));}
@@ -43,6 +43,12 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const commands = await load('dsh-commands');
   const agents = await load('dsh-agent');
   const sessions = await load('dsh-session');
+  const { sessionFormatCatalog } = await load('dsh-session-format-catalog');
+  const restoreStored = (session, events = session.snapshotEvents()) => {
+    const restore = sessionFormatCatalog.createRestore(sessionFormatCatalog.encodeCurrentHeader({ ...session.header, delegationDepth: session.header.delegationDepth ?? 0 }, session.inheritedEventCount), { recovery: 'strict', validation: 'current' });
+    for (const event of events) restore.decodeRow(sessionFormatCatalog.encodeCurrentEvent(event));
+    return restore.finish();
+  };
   const projections = await load('dsh-session-projection');
   const tokenMeter = await load('dsh-token-meter');
   const llm = await load('dsh-llm');
@@ -110,11 +116,18 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
     });
     target.followup(llm.createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] }));
     await done; if (owner === ctx) await handle.learner.flush();
+    restoreStored(target.session); // Same strict persisted-log reader used on Desktop restart.
+    assert.equal(target.session.eventAt(target.session.surface.nodes[0]).type, 'system/message');
   };
   for (let i = 0; i < 3; i++) await turn(agent, 'Please keep replies concise.');
   assert.equal(extractions, 3);
   assert.equal((await handle.brain.personality()).traits.verbosity, 0.45);
   assert.equal(agent.session.snapshotEvents().filter(e => e.type === 'user/message' && e.data.source.kind === 'brain:long-term-reference').length, 1, 'evidence-only changes must not rewrite the model snapshot');
+  const wrongOrder = structuredClone(agent.session.snapshotEvents());
+  const headIndex = wrongOrder.findIndex(e => e.type === 'system/message');
+  const brainIndex = wrongOrder.findIndex(e => e.type === 'user/message' && e.data.source.kind === 'brain:long-term-reference');
+  [wrongOrder[headIndex], wrongOrder[brainIndex]] = [{ ...wrongOrder[brainIndex], seq: headIndex }, { ...wrongOrder[headIndex], seq: brainIndex }];
+  assert.throws(() => restoreStored(agent.session, wrongOrder), /protected first surface head/, 'regression: the persisted-log reader must reject the old pre-system injection order');
   await turn(agent, 'This project stores its build manifests in the NEBULA format.');
   const outcome = await ctx.commands.execute(agent, '/brain remember workspace Project A uses the ORBIT format.', [], new AbortController().signal);
   assert.ok(JSON.stringify(outcome).includes('Project A uses the ORBIT format.'));
@@ -181,6 +194,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   // Migrate legacy shared snapshots while preserving unrelated named sections.
   const legacy = await make('brain-legacy-session', workspaceB);
   const oldText = 'LEGACY_PRIVATE_A';
+  await turn(legacy, 'Initialize a protected system head.');
   legacy.session.append('user/message', { id: 'legacy-memory', role: 'user', content: [{ type: 'text', text: oldText }],
     source: { kind: 'runtime-context', form: 'snapshot', sections: [{ name: 'brain:long-term-reference', text: oldText }, { name: 'other:context', text: 'OTHER_PLUGIN_PRESERVED' }] } }, { surfaceOp: 'append' });
   await turn(legacy, 'What are my preferences?');
@@ -194,7 +208,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const disabled = requests.filter(r => r.purpose !== 'compaction').at(-1).messages.find(m => m.source.kind === 'brain:long-term-reference');
   assert.equal(disabled.content[0].text, 'Brain reference disabled.');
   await handle.brain.configure({ injectMemories: true, injectPersonality: true });
-  console.log(JSON.stringify({ contextAudit: true, longTurns: longMeasurements.length, maximumBrainSnapshots: Math.max(...longMeasurements.map(x => x.snapshots)), maximumBrainChars: Math.max(...longMeasurements.map(x => x.chars)), sessionReplay: true, legacyMigration: true, unrelatedSectionsPreserved: true, globalAcrossWorkspaces: true, disableClearsOldContext: true, restoresAfterCompaction: true, hostTokenAccounting: true }));
+  console.log(JSON.stringify({ contextAudit: true, longTurns: longMeasurements.length, maximumBrainSnapshots: Math.max(...longMeasurements.map(x => x.snapshots)), maximumBrainChars: Math.max(...longMeasurements.map(x => x.chars)), sessionReplay: true, strictStoredReplay: true, legacyMigration: true, unrelatedSectionsPreserved: true, globalAcrossWorkspaces: true, disableClearsOldContext: true, restoresAfterCompaction: true, hostTokenAccounting: true }));
   await ctx.commands.execute(agent, '/brain freeze', [], new AbortController().signal);
   assert.equal((await handle.brain.personality()).frozen, true);
   const learnedBeforeRestart = await handle.brain.personality();

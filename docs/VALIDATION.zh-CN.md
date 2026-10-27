@@ -1,10 +1,21 @@
 # DSH Brain 验证记录
 
+## v0.3.1：首次参考写入顺序与严格磁盘恢复
+
+v0.3.0 的最终 Desktop 完整重启验收发现 `system/message requires a protected first surface head`，因此撤回推荐。原有 `new Session(...)` 内存重放断言没有覆盖持久化格式的跨事件关系校验，不能等同于磁盘恢复验收。
+
+修复：初始参考通过 `agent/pre-step` 返回消息队列，在宿主写入系统头之后提交；`agent/request` 对空 surface 延后，对已有会话只更新受保护系统头之后的参考。新增两项生命周期单测，总计 69 项；运行时每轮都使用真实 sessionFormatCatalog 严格编码/恢复，并验证模拟旧顺序会被拒绝。
+
+本次生成的两段合成验收会话在独立备份后修复首对事件顺序和对应引用，严格恢复通过，用户/助手/工具正文保持不变；没有改写原有长期记忆或配置。
+
+修正版的第三段真实新会话调用 brain_list / brain_personality 成功，正常退出 Desktop 全部进程后重启，原生窗口成功恢复 `BRAIN_RESTART_031_OK` 历史，未出现加载错误。修复的两段旧验收会话也重新可见并通过原生历史读取。
+
+
 ## v0.3.0：记忆与性格上下文改进（2026-10-27）
 
 当前源码版本为 0.3.0；功能代码已安装到日常 desktop profile，并完成原生设置与真实聊天验收。测试环境为 Windows、Node.js 24.14.1、Desktop bundled agent-loop 0.2.1-rc.3 / Cordis 4.0.5。调研与设计评估见[记忆与性格改进评估](MEMORY-CONTEXT-REVIEW.zh-CN.md)。
 
-- `npm run verify`：语法、文档链接与包元数据检查，67 项测试及 tarball 干净安装检查通过。新 tarball 包含 28 个文件，新增预算及上下文模块可正常导入；CLI 使用临时合成目录。
+- `npm run verify`：语法、文档链接与包元数据检查，67 项测试及 tarball 干净安装检查通过。v0.3.0 tarball 包含 28 个文件，新增预算及上下文模块可正常导入；CLI 使用临时合成目录。
 - `node scripts/runtime-smoke.mjs`：加载实际 app.asar 中的 227 个运行时包，包括 tokenMeter；模型使用合成 provider，不读取用户 profile 或调用网络模型。
 - 30 轮真实 agent-loop 请求：每次只有 **1 个当前 Brain 参考消息**，该样本最大 **774 字符**；证据计数变化不重写参考内容。其他普通聊天消息仍正常累积。
 - 真实宿主验证：全局偏好跨工作区召回、工作区切换后的当前参考隔离、旧共享快照只清理 Brain 分节、持久会话重放、压缩移除参考后恢复、重复参考收敛为一份、关闭注入后清除旧内容。

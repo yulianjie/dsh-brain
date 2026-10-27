@@ -81,7 +81,7 @@
 
 ## 聊天集成
 
-启动时加载状态；根 agent 回合结束时只取本轮用户文本，排除 subagent、工具、runtime context。后台提取最多一个模型调用每轮，限制输入长度、并发、队列、超时；不能无限重试或递归生成 agent。凭据走宿主 llm，不另读 auth 文件。`agent/request` 在宿主准备模型请求时生成有来源的低优先级参考消息，文本不走模板插值。使用原生单节点 surface replacement 保留一个当前快照，写入相邻的 tokenMeter 计量事件供宿主重放和用量统计。原始日志不删除，旧共享 runtime 快照只移除 Brain 分节。保留用户当前指令优先。workspace 必须从该 agent/session 的 cwd 获取，不能用插件进程 cwd 代替。
+启动时加载状态；根 agent 回合结束时只取本轮用户文本，排除 subagent、工具、runtime context。后台提取最多一个模型调用每轮，限制输入长度、并发、队列、超时；不能无限重试或递归生成 agent。凭据走宿主 llm，不另读 auth 文件。首次请求通过 `agent/pre-step` 队列在系统头之后提交参考，后续 `agent/request` 在宿主准备模型请求时更新有来源的低优先级参考消息，文本不走模板插值。使用原生单节点 surface replacement 保留一个当前快照，写入相邻的 tokenMeter 计量事件供宿主重放和用量统计。原始日志不删除，旧共享 runtime 快照只移除 Brain 分节。保留用户当前指令优先。workspace 必须从该 agent/session 的 cwd 获取，不能用插件进程 cwd 代替。
 
 模型工具使用 brain_ 前缀：搜索、列表、按 ID 分段读全文、记住、遗忘、性格查看；破坏性人格控制和导入导出由用户 `/brain` 命令或 CLI 完成。`/brain` 支持 help/status/list/search/remember/forget/personality/freeze/unfreeze/reset/history/rollback；复杂导入导出由 CLI 提供。
 
