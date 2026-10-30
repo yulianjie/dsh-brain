@@ -4,6 +4,7 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { promises as fsp } from 'node:fs';
 import { Brain } from '../lib/core.js';
 import { BRIEF_HEADER, styleBrief } from '../lib/style.js';
 
@@ -156,6 +157,107 @@ test('corrupt file is reported and never overwritten, init/read-only preserves r
   await writeFile(brain.file, '{ broken JSON');
   await assert.rejects(new Brain({ dataDir }).init(), /corrupt/);
   assert.equal(await readFile(brain.file, 'utf8'), '{ broken JSON');
+});
+
+/** Windows refuses to replace a file that another handle has open. */
+function failStoreRename(t, file, failure) {
+  const original = fsp.rename;
+  fsp.rename = async (from, to, ...rest) => {
+    if (path.resolve(to) === path.resolve(file)) await failure();
+    return original(from, to, ...rest);
+  };
+  t.after(() => { fsp.rename = original; });
+}
+const renameEperm = () => Object.assign(new Error('EPERM: operation not permitted, rename'), { code: 'EPERM', syscall: 'rename' });
+/** The retry is Windows-only: pretend to run on `platform` for one test. */
+function onPlatform(t, platform) {
+  const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { ...descriptor, value: platform });
+  t.after(() => Object.defineProperty(process, 'platform', descriptor));
+}
+
+const lockExists = async dataDir => fsp.access(path.join(dataDir, '.brain.lock')).then(() => true, () => false);
+const temporaryFiles = async dataDir => (await fsp.readdir(dataDir)).filter(name => name.endsWith('.tmp'));
+
+test('a transient store rename EPERM, EACCES or EBUSY on Windows is retried while the lock is held', async t => {
+  const { brain, dataDir } = await fixture(t);
+  onPlatform(t, 'win32');
+  let calls = 0; const lockChecks = [];
+  const transient = [renameEperm(), Object.assign(new Error('EACCES: permission denied, rename'), { code: 'EACCES', syscall: 'rename' }), Object.assign(new Error('EBUSY: resource busy or locked, rename'), { code: 'EBUSY', syscall: 'rename' })];
+  failStoreRename(t, brain.file, async () => {
+    calls += 1;
+    if (calls <= 3) { lockChecks.push(await lockExists(dataDir)); throw transient[calls - 1]; }
+  });
+  await brain.remember({ text: '写入在 rename EPERM 短暂出现后仍然成功', scope: 'global' });
+  assert.equal(calls, 4);
+  assert.deepEqual(lockChecks, [true, true, true]);
+  const records = await new Brain({ dataDir }).list();
+  assert.equal(records.length, 1);
+  assert.equal(records[0].text, '写入在 rename EPERM 短暂出现后仍然成功');
+  assert.deepEqual(await temporaryFiles(dataDir), []);
+  assert.equal(await lockExists(dataDir), false);
+});
+
+test('a permanent store rename EPERM still surfaces and leaves the store unchanged', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const before = await readFile(brain.file, 'utf8');
+  onPlatform(t, 'win32');
+  brain._renameRetryMs = 100;
+  let inject = true, calls = 0;
+  failStoreRename(t, brain.file, async () => { calls += 1; if (inject) throw renameEperm(); });
+  const started = Date.now();
+  await assert.rejects(brain.remember({ text: '永久失败的写入不应破坏存储', scope: 'global' }), error => error.code === 'EPERM' && error.syscall === 'rename');
+  assert.ok(Date.now() - started >= 100);
+  assert.ok(calls < 200, `the retry must stop at the configured window, saw ${calls} rename calls`);
+  assert.equal(await readFile(brain.file, 'utf8'), before);
+  assert.deepEqual(await temporaryFiles(dataDir), []);
+  assert.equal(await lockExists(dataDir), false);
+  inject = false;
+  await brain.remember({ text: '永久失败的写入不应破坏存储', scope: 'global' });
+});
+
+test('the store rename is not retried off Windows', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const before = await readFile(brain.file, 'utf8');
+  onPlatform(t, 'linux');
+  let calls = 0;
+  failStoreRename(t, brain.file, async () => { calls += 1; throw renameEperm(); });
+  await assert.rejects(brain.remember({ text: '非 Windows 平台不应重试', scope: 'global' }), error => error.code === 'EPERM');
+  assert.equal(calls, 1);
+  assert.equal(await readFile(brain.file, 'utf8'), before);
+  assert.deepEqual(await temporaryFiles(dataDir), []);
+  assert.equal(await lockExists(dataDir), false);
+});
+
+test('a non-transient store rename error on Windows is not retried', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const before = await readFile(brain.file, 'utf8');
+  onPlatform(t, 'win32');
+  let calls = 0;
+  failStoreRename(t, brain.file, async () => { calls += 1; throw Object.assign(new Error('ENOSPC: no space left on device, rename'), { code: 'ENOSPC', syscall: 'rename' }); });
+  await assert.rejects(brain.remember({ text: '非瞬时错误不应重试', scope: 'global' }), error => error.code === 'ENOSPC');
+  assert.equal(calls, 1);
+  assert.equal(await readFile(brain.file, 'utf8'), before);
+  assert.deepEqual(await temporaryFiles(dataDir), []);
+  assert.equal(await lockExists(dataDir), false);
+});
+
+test('an abort during the store rename retry stops it and leaves the store unchanged', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const before = await readFile(brain.file, 'utf8');
+  onPlatform(t, 'win32');
+  const controller = new AbortController();
+  let calls = 0;
+  failStoreRename(t, brain.file, async () => {
+    calls += 1;
+    if (calls === 2) controller.abort(new Error('plugin reloaded during rename'));
+    throw renameEperm();
+  });
+  await assert.rejects(learn(brain, 1, '请记住我喜欢乌龙茶。', { signal: controller.signal }), /plugin reloaded during rename/);
+  assert.equal(calls, 2);
+  assert.equal(await readFile(brain.file, 'utf8'), before);
+  assert.deepEqual(await temporaryFiles(dataDir), []);
+  assert.equal(await lockExists(dataDir), false);
 });
 
 test('multiple instances and processes serialize independent writes', async t => {
