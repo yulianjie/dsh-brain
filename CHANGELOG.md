@@ -5,10 +5,20 @@
 - Fix intermittent Windows failures when concurrent writers contend for
   `.brain.lock`: NTFS reports a directory that another writer is creating or
   removing at that instant as `EPERM`/`EBUSY` instead of `EEXIST`, which aborted
-  an ordinary write. The lock now treats those codes as contention inside the
-  existing bounded wait, reports a lock path that can never be created instead
-  of a misleading live-writer message, retries transient unlock errors, and
-  covers both cases with regression tests.
+  an ordinary write. Those codes now count as contention inside the existing
+  bounded wait, and only the directory creation counts as contention: a
+  failure while writing `owner.json` still surfaces immediately. Unlock now
+  asks `fs.rm` for bounded retries (`maxRetries`/`retryDelay`) instead of
+  removing the directory once, and a lock directory that has already vanished
+  counts as a successful unlock. A failed takeover-directory cleanup no
+  longer aborts the write that triggered the reclaim. A timeout that reports
+  an uncreatable lock directory keeps the errno `code`
+  (`error.code === 'EPERM'`) with `cause` pointing at the original failure,
+  and says "cannot be created" only when the lock directory never appeared
+  (an existing directory still reports "locked"). Contention is diagnosed
+  from the most recent failure alone, so an old `EPERM` cannot poison a later
+  `EEXIST` wait. Regression tests cover `EPERM`, `EBUSY` and the contention
+  reset.
 
 ## 0.4.0 — 2026-10-30
 
