@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Fix intermittent Windows failures when concurrent writers contend for
+  `.brain.lock`: NTFS reports a directory that another writer is creating or
+  removing at that instant as `EPERM`/`EBUSY` instead of `EEXIST`, which aborted
+  an ordinary write. The lock now treats those codes as contention inside the
+  existing bounded wait, reports a lock path that can never be created instead
+  of a misleading live-writer message, retries transient unlock errors, and
+  covers both cases with regression tests.
+
 ## 0.4.0 — 2026-10-30
 
 - Replace raw personality JSON injection with a deterministic natural-language

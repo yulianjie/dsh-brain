@@ -4,6 +4,7 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { promises as fsp } from 'node:fs';
 import { Brain } from '../lib/core.js';
 import { BRIEF_HEADER, styleBrief } from '../lib/style.js';
 
@@ -171,4 +172,40 @@ test('multiple instances and processes serialize independent writes', async t =>
   });
   await Promise.all([run(1), run(2), run(3)]);
   assert.equal((await brain.list()).length, 56);
+});
+
+/** Windows reports a lock directory that a concurrent writer is creating or
+ * removing at that instant as EPERM/EBUSY instead of EEXIST. */
+function failLockMkdir(t, lockDir, failure) {
+  const original = fsp.mkdir;
+  fsp.mkdir = async (target, ...rest) => {
+    if (path.resolve(target) === path.resolve(lockDir)) failure();
+    return original(target, ...rest);
+  };
+  t.after(() => { fsp.mkdir = original; });
+}
+const eperm = () => Object.assign(new Error('EPERM: operation not permitted, mkdir'), { code: 'EPERM' });
+
+test('a transient lock mkdir EPERM is retried instead of failing the write', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-core-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  let remaining = 3;
+  failLockMkdir(t, path.join(dataDir, '.brain.lock'), () => { if (remaining-- > 0) throw eperm(); });
+  const brain = new Brain({ dataDir });
+  await brain.init();
+  await brain.remember({ text: '写入在锁目录短暂 EPERM 后仍然成功', scope: 'global' });
+  assert.equal((await new Brain({ dataDir }).list()).length, 1);
+});
+
+test('an uncreatable lock directory reports the path instead of a misleading lock owner', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-core-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  failLockMkdir(t, path.join(dataDir, '.brain.lock'), () => { throw eperm(); });
+  const brain = new Brain({ dataDir, lockTimeoutMs: 250 });
+  await assert.rejects(brain.init(), error => {
+    assert.match(error.message, /cannot be created/i);
+    assert.match(error.message, /\.brain\.lock/);
+    assert.equal(error.cause?.code, 'EPERM');
+    return true;
+  });
 });
