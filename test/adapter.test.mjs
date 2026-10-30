@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { BackgroundLearner, createIntegration, runCommand, workspaceOf, apply } from '../lib/index.js';
 import { Config, DEFAULTS, readConfig } from '../lib/config.js';
 import { createVolatile, updateVolatile } from '@deepseek-ai/cosmokit';
+import { BRIEF_HEADER, styleBrief } from '../lib/style.js';
 
 const config = { extractionMaxQueue: 2, extractionTimeoutMs: 25 };
 const job = (id = '1') => ({ sessionId: 'synthetic', turnId: id, workspace: process.cwd(), userText: 'Please keep replies concise.', provider: 'synthetic', model: 'model' });
@@ -226,7 +227,7 @@ test('native stable refs change context policy and limits without writing learne
   const refs = Config({});
   const state = await setup(t, refs);
   await state.brain.remember({ text: 'ORBIT project manifest', scope: 'workspace', workspace: state.dataDir });
-  await state.brain.setPersonality({ frozen: true, traits: { verbosity: 0.35 } });
+  await state.brain.setPersonality({ frozen: true, traits: { verbosity: 0.7 } });
   const stored = await state.brain.exportData();
   updateVolatile(refs.injectMemories, createVolatile(false));
   updateVolatile(refs.personalityMode, createVolatile('manual'));
@@ -234,11 +235,15 @@ test('native stable refs change context policy and limits without writing learne
   updateVolatile(refs.maxContextChars, createVolatile(3000));
   await state.handlers.get('loader/volatile-update')([['injectMemories'], ['personalityMode'], ['manualVerbosity'], ['maxContextChars']]);
   const context = state.contextFor(state.agent);
-  assert.ok(context.includes('"mode":"manual"')); assert.ok(context.includes('"verbosity":0.2')); assert.ok(!context.includes('ORBIT'));
+  assert.ok(context.includes(BRIEF_HEADER + styleBrief({ verbosity: 0.2 }))); assert.ok(!context.includes('ORBIT'));
+  assert.ok(!context.includes('"mode"')); assert.ok(!context.includes('"traits"')); assert.ok(!context.includes('"verbosity"'));
   assert.equal(state.brain.maxContextChars, 3000);
   assert.deepEqual(await state.brain.exportData(), stored);
   updateVolatile(refs.personalityMode, createVolatile('adaptive'));
-  await state.syncConfig(); assert.ok(state.contextFor(state.agent).includes('"verbosity":0.35'));
+  await state.syncConfig();
+  const adaptive = state.contextFor(state.agent);
+  assert.ok(adaptive.includes(BRIEF_HEADER + styleBrief({ verbosity: 0.7 })));
+  assert.ok(!adaptive.includes(styleBrief({ verbosity: 0.2 })), 'manual overlay must not survive the switch back');
   assert.deepEqual(await state.brain.exportData(), stored);
 });
 

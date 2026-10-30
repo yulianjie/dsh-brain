@@ -58,6 +58,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
   const { createIntegration, default: brainPlugin } = await import(pathToFileURL(join(packageRoot, 'lib/index.js')));
   const { Brain } = await import(pathToFileURL(join(packageRoot, 'lib/core.js')));
+  const { BRIEF_HEADER, styleBrief } = await import(pathToFileURL(join(packageRoot, 'lib/style.js')));
   const packageLink = join(directory, 'node_modules', ...packageManifest.name.split('/'));
   mkdirSync(dirname(packageLink), { recursive: true });
   symlinkSync(packageRoot, packageLink, process.platform === 'win32' ? 'junction' : 'dir');
@@ -136,7 +137,8 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const assembly = await ctx.systemPrompt.assemble(agents.assembleContextFor(fresh));
   const context = { text: handle.contextFor(fresh) };
   assert.ok(context.text.includes('ORBIT')); assert.ok(!assembly.contexts.some(item => item.name === 'brain:long-term-reference'));
-  assert.ok(context.text.includes('concise'));
+  // The learned style reaches new sessions as the text brief; raw style wording stays out.
+  assert.ok(context.text.includes(BRIEF_HEADER + styleBrief((await handle.brain.personality()).traits))); assert.ok(!context.text.includes('Please keep replies concise'));
   assert.ok(context.text.includes('NEBULA'), 'ordinary chat must be automatically learned');
   assert.ok(!handle.contextFor(other).includes('ORBIT'));
   const execution = await ctx.tools.execute({ name: 'brain_search', arguments: { query: 'ORBIT' }, agent: fresh, callId: 'smoke-search', signal: new AbortController().signal });
@@ -260,7 +262,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const uiAgent = await host.agentLoop.create('settings-probe', { provider: 'brain-synthetic', model: 'synthetic' }, { cwd: workspaceA });
   await turn(uiAgent, 'Show configured style.', host);
   const updatedContext = requests.filter(r => r.purpose !== 'compaction').at(-1).messages.find(m => m.source.kind === 'brain:long-term-reference').content[0].text;
-  assert.ok(!updatedContext.includes('ORBIT')); assert.ok(updatedContext.includes('"mode":"manual"')); assert.ok(updatedContext.includes('"verbosity":0.2'));
+  assert.ok(!updatedContext.includes('ORBIT')); assert.ok(updatedContext.includes(BRIEF_HEADER + styleBrief({ verbosity: 0.2 }))); assert.ok(!updatedContext.includes('"traits"'));
   assert.equal(readFileSync(join(directory, 'brain/brain.json'), 'utf8'), storedBefore, 'settings edits must not overwrite learned/frozen personality');
   const patchBeforeInvalid = readFileSync(patchPath, 'utf8');
   await assert.rejects(host.settings.mutate('brain', [{ op: 'set', path: ['extractionProvider'], value: 'partial-route' }], descriptor().revision), /同时/);

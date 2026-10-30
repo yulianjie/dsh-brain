@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Brain } from '../lib/core.js';
 import { estimateTokens } from '../lib/budget.js';
 import { validateExtraction } from '../lib/extraction.js';
+import { BRIEF_HEADER, styleBrief } from '../lib/style.js';
 
 async function fixture(t, options = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'brain-memory-audit-'));
@@ -33,18 +34,21 @@ test('global preferences survive restart and unrelated queries across projects; 
   await assert.rejects(restarted.readMemory({ id: record.id, workspace: projectB }), /scope/);
 });
 
-test('personality evidence counters do not change prompt until effective traits change', async t => {
+test('style evidence stays invisible until a band is crossed; counters and raw values never inject', async t => {
   const { brain } = await fixture(t);
   const initial = brain.context({});
-  await learn(brain, 1, '以后回答请简短一点。');
-  assert.equal(brain.context({}), initial);
-  await learn(brain, 2, '以后回答请简短一点。');
-  assert.equal(brain.context({}), initial);
-  await learn(brain, 3, '以后回答请简短一点。');
+  for (let turn = 1; turn <= 3; turn++) await learn(brain, turn, '以后回答请简短一点。');
+  assert.equal((await brain.personality()).traits.verbosity, 0.45);
+  assert.equal(brain.context({}), initial, 'mid-band drift must not change the text brief');
+  for (let turn = 4; turn <= 6; turn++) await learn(brain, turn, '以后回答请简短一点。');
+  const personality = await brain.personality();
+  assert.ok(personality.traits.verbosity < 0.35);
   assert.notEqual(brain.context({}), initial);
-  assert.doesNotMatch(brain.context({}), /evidenceCounts|controlGeneration|version|frozen/);
+  assert.ok(brain.context({}).includes(BRIEF_HEADER + styleBrief(personality.traits)));
+  assert.doesNotMatch(brain.context({}), /evidenceCounts|controlGeneration|version|frozen|"traits"/);
   const frozen = brain.context({});
   await brain.setPersonality({ frozen: true });
+  for (let turn = 7; turn <= 9; turn++) await learn(brain, turn, '以后回答请详细展开。');
   assert.equal(brain.context({}), frozen);
 });
 

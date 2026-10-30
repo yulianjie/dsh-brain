@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { Brain } from '../lib/core.js';
+import { BRIEF_HEADER, styleBrief } from '../lib/style.js';
 
 async function fixture(t, options = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-core-'));
@@ -95,7 +96,8 @@ test('context respects exact character budget and notices concurrent updates', a
   await other.remember({ text: '新的跨实例偏好是使用中文。', scope: 'global' });
   assert.ok(brain.context({}).includes('新的跨实例偏好'));
   await other.setPersonality({ traits: { verbosity: 0.25 } });
-  assert.ok(brain.context({}).includes('0.25'));
+  assert.ok(brain.context({}).includes(BRIEF_HEADER + styleBrief({ verbosity: 0.25 })));
+  assert.ok(!brain.context({}).includes('0.25'));
   for (let i = 0; i < 10; i++) await other.remember({ text: `${i} ${'内容'.repeat(200)}`, scope: 'global' });
   assert.ok(brain.context({}).length <= 1000);
   assert.equal(new Brain({ dataDir, maxContextChars: 20 }).context({}), '');

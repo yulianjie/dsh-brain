@@ -21,11 +21,11 @@
 
 ## 文档导航
 
-[安装](#安装与卸载) · [命令](#日常使用) · [配置](#配置与存储) · [故障排查](docs/TROUBLESHOOTING.md) · [架构](docs/DESIGN.zh-CN.md) · [验证记录](docs/VALIDATION.zh-CN.md) · [更新日志](CHANGELOG.md) · [贡献](CONTRIBUTING.md) · [安全政策](SECURITY.md)
+[安装](#安装与卸载) · [命令](#日常使用) · [配置](#配置与存储) · [故障排查](docs/TROUBLESHOOTING.md) · [架构](docs/DESIGN.zh-CN.md) · [机制拆解与外部对照](docs/ARCH-BENCHMARK.zh-CN.md) · [验证记录](docs/VALIDATION.zh-CN.md) · [更新日志](CHANGELOG.md) · [贡献](CONTRIBUTING.md) · [安全政策](SECURITY.md)
 
 ## 兼容性
 
-当前版本 `0.3.1`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
+当前版本 `0.4.0`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
 
 | 层级 | 支持与验证范围 |
 | --- | --- |
@@ -44,21 +44,21 @@
 
 ```powershell
 $dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
-& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.3.1'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.4.0'
 ```
 
-只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.3.1`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
+只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.4.0`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
 
 ### 从 GitHub Release 安装
 
-从 [v0.3.1 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.3.1) 下载 `yulianjie-dsh-brain-0.3.1.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
+从 [v0.4.0 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.4.0) 下载 `yulianjie-dsh-brain-0.4.0.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
 
 ```powershell
 $expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
-$actual = (Get-FileHash .\yulianjie-dsh-brain-0.3.1.tgz -Algorithm SHA256).Hash
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.4.0.tgz -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'SHA256 mismatch' }
-tar -xf .\yulianjie-dsh-brain-0.3.1.tgz
-.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.3.1.tgz
+tar -xf .\yulianjie-dsh-brain-0.4.0.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.0.tgz
 ```
 
 安装仍需下载 npm 依赖；tarball 未内置 `node_modules`。
@@ -73,7 +73,7 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.3.1.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.0.tgz
 ```
 
 重启 Desktop 后，在插件列表确认 `@yulianjie/dsh-brain`，再用 `/brain status` 检查状态。可以先用 `/brain remember global 我喜欢中文回答` 保存一条明确偏好，并通过 `/brain list global` 查看。
@@ -84,7 +84,7 @@ npm.cmd pack
 
 ```powershell
 .\scripts\install.ps1 -DryRun
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.3.1.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
@@ -160,7 +160,7 @@ npm.cmd pack
 
 同一维度最近最多 5 次有效反馈中，至少 **3 个独立轮次且不少于 75%** 支持同一方向，最新反馈也同向，才自动变化；每轮变化不超过 `0.05`，距离目标不超过 `0.05` 时停止微调。矛盾反馈不取平均后继续漂移；项目专属或临时风格要求不改变全局性格。重复事件不会重复计数；冻结期间不积攒稍后突然生效的漂移。人工设置立即生效，历史最多保留 100 条，每维度反馈证据最多保留 20 条。不能根据人口学信息推断交流风格。
 
-模型提取支持有用户原文证据的明确风格反馈，包括固定表达之外的语义反馈。本地兜底只识别有限的中英文表达，例如“以后回答简洁一点”“回复可以更温暖”“不要开玩笑”，可能漏掉同义表达。自动学习的全局风格反馈可以在列表中查看，但不会作为立即生效的偏好原句注入，避免绕过逐步变化和冻结控制。
+模型提取支持有用户原文证据的明确风格反馈，包括固定表达之外的语义反馈。本地兜底只识别有限的中英文表达，例如“以后回答简洁一点”“回复可以更温暖”“不要开玩笑”，可能漏掉同义表达。本地规则只在提取模型不可用（超时、出错、输出无法解析）时用于学习风格；模型正常返回时，风格只按模型给出的、带用户原文证据的反馈学习。自动学习的全局风格反馈可以在列表中查看，但不会作为立即生效的偏好原句注入，避免绕过逐步变化和冻结控制。
 
 ## 本地管理 CLI
 
@@ -210,7 +210,7 @@ node .\bin\brain.mjs --data-dir "$env:TEMP\brain-sandbox" remember "合成测试
 
 默认存储为 `$DSH_HOME/brain/brain.json`，未设置 `DSH_HOME` 时为 `~/.dsh/brain/brain.json`。不同 profile 若使用同一个 `DSH_HOME` 和默认目录，将共享同一份全局偏好与风格；工作区记录仍按路径隔离。需要不同身份时，为各 profile 配置不同 `dataDir`。
 
-插件采用 JSON 原子替换和独立写锁目录 `.brain.lock`，跨进程修改在锁内重新读取并合并。遇到损坏 JSON、未知 schema 或非法数据会报错并保留原文件。写入锁等待默认 15 秒；确认原写入进程已退出后，才能手动移除遗留锁。存储不是加密数据库，文件权限仍由系统和用户账户决定。
+插件采用 JSON 原子替换和独立写锁目录 `.brain.lock`，跨进程修改在锁内重新读取并合并。遇到损坏 JSON、未知 schema 或非法数据会报错并保留原文件。写入锁等待默认 15 秒；同机崩溃残留的 `.brain.lock` 会在确认原进程已退出后自动接管，其他情况（不同主机、缺少 `host` 的旧锁、仍在运行的写入者）仍需确认写入者退出后手动移除 `.brain.lock`（如存在 `.brain.lock.takeover` 也一并处理）。存储不是加密数据库，文件权限仍由系统和用户账户决定。
 
 `dataDir` 属于结构性高级设置，不在图形表单中暴露。需要它或其他配置文件 override 时，可在对应 profile 现有的 `cordis.patch.yml` 数组中追加针对 `id: brain` 的条目。例如禁用自动学习：
 

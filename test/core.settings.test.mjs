@@ -4,6 +4,7 @@ import { mkdtemp, rm, mkdir, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Brain } from '../lib/core.js';
+import { BRIEF_HEADER, styleBrief } from '../lib/style.js';
 
 async function fixture(t, options = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-settings-'));
@@ -15,21 +16,28 @@ const feedback = (brain, turn, options = {}) => brain.learn({ sessionId: 'settin
 test('runtime policy and manual overlay never overwrite learned or CLI state across restarts', async t => {
   const { brain, dataDir } = await fixture(t);
   await feedback(brain, 1); await feedback(brain, 2); await feedback(brain, 3);
+  await feedback(brain, 4); await feedback(brain, 5); await feedback(brain, 6);
   await brain.setPersonality({ frozen: true });
   const personality = await brain.personality();
   const before = await readFile(brain.file, 'utf8');
   await brain.configure({ personalityMode: 'manual', manualTraits: { warmth: 0.9, verbosity: 0.8 }, personalityLearningEnabled: false, maxContextChars: 8000, injectMemories: false });
   const manual = brain.context({});
-  assert.ok(manual.includes('"mode":"manual"'));
-  assert.ok(manual.includes('"warmth":0.9'));
-  assert.ok(manual.includes('"verbosity":0.8'));
+  assert.ok(manual.includes(BRIEF_HEADER + styleBrief({ warmth: 0.9, verbosity: 0.8 })));
+  assert.ok(!manual.includes('"mode"'));
+  assert.ok(!manual.includes('"traits"'));
+  assert.ok(!manual.includes('"warmth"'));
   assert.equal(await readFile(brain.file, 'utf8'), before);
   await brain.configure({ maxContextChars: 7000 });
   assert.deepEqual(await brain.personality(), personality);
   const restarted = await new Brain({ dataDir, personalityMode: 'adaptive', manualTraits: { warmth: 1 } }).init();
   assert.deepEqual(await restarted.personality(), personality);
   assert.equal(await readFile(brain.file, 'utf8'), before);
-  assert.ok(restarted.context({}).includes('"verbosity":0.45'));
+  // The learned value crossed the low band, so a restart must render the *learned*
+  // brief, not the neutral one: this is the assertion the band contract can carry.
+  assert.ok(personality.traits.verbosity < 0.35, `expected a low-band trait, got ${personality.traits.verbosity}`);
+  assert.ok(restarted.context({}).includes(BRIEF_HEADER + styleBrief(personality.traits)));
+  assert.ok(restarted.context({}).includes('回答偏简短'));
+  assert.ok(!restarted.context({}).includes('"verbosity"'));
 });
 
 test('memory and personality injection switches operate independently and per-call overrides do not stick', async t => {
@@ -37,15 +45,16 @@ test('memory and personality injection switches operate independently and per-ca
   await brain.remember({ text: '记忆标记：工作时间使用中文。', scope: 'global' });
   const personalityOnly = brain.context({ injectMemories: false });
   assert.ok(!personalityOnly.includes('记忆标记'));
-  assert.ok(personalityOnly.includes('"traits"'));
+  assert.ok(personalityOnly.includes(BRIEF_HEADER + styleBrief({})));
   const memoryOnly = brain.context({ injectPersonality: false });
   assert.ok(memoryOnly.includes('记忆标记'));
-  assert.ok(!memoryOnly.includes('"traits"'));
-  assert.ok(!brain.context({ personalityMode: 'off' }).includes('"traits"'));
+  assert.ok(!memoryOnly.includes(BRIEF_HEADER));
+  assert.ok(!brain.context({ personalityMode: 'off' }).includes(BRIEF_HEADER));
   assert.equal(brain.context({ injectMemories: false, injectPersonality: false }), '');
   assert.equal(brain.context({ injectMemories: false, personalityMode: 'off' }), '');
   assert.ok(brain.context({}).includes('记忆标记'));
-  assert.ok(brain.context({}).includes('"traits"'));
+  assert.ok(brain.context({}).includes(BRIEF_HEADER));
+  assert.ok(!brain.context({}).includes('"traits"'));
 });
 
 test('manual/off/disabled personality learning pauses evidence while memory learning continues', async t => {

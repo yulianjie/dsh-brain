@@ -20,6 +20,18 @@
 
 0.2.0 验收覆盖真实宿主设置命名空间与 volatile 更新、配置持久化、客户端模块注册、原生 Desktop 页面显示、保存后离开再进入仍保留值，以及配置修改不重置学习状态。
 
+## v0.4：风格文本化与 dream 规划（只读）
+
+v0.4 第一阶段先解决两个只读问题：模型如何直接理解风格偏好，以及如何发现值得合并的记忆。两者都不改变持久化结构。
+
+风格注入从裸 JSON（`{"mode":"adaptive","traits":{"warmth":0.62,…}}`）改为自然语言行为约定。`lib/style.js` 按固定顺序（warmth、verbosity、humor、proactivity、formality）把每个维度分到 low/mid/high 三档，0.35 与 0.65 属于 mid，只把非 mid 维度渲染成逐字固定的句子，全部 mid 时输出中性句。`context()` 只拼接 `BRIEF_HEADER` 与正文，不再注入 mode、维度名或数字；adaptive 使用当前学习值，manual 使用手动值，off 不注入。分档意味着 0.45 这类档内漂移不会改变提示词，只有跨档才改变行为描述，这是有意的稳定性取舍。
+
+`lib/dream.js` 是纯函数规划层：`groupCandidates()` 先在相同 scope/workspace 内按非空 key 成组，再按 `normalized(text)` 的哈希做线性精确去重，剩余记录才用共享分词模块 `lib/text.js` 建 term 倒排索引，只比较共享词项的对，并设 20 万次比较上限；超限时 `planDream().stats.truncated` 为 true。只返回至少两条的组，超过 20 条的组按 id 排序切成多个 2..20 的块，排序确定。`dreamPayload()` 生成有组数、记忆数、文本长度上限的模型输入；`validateDream()` 结构性问题一律抛出带字段信息的 `Invalid dream plan:` 错误，缺省的 `groups`/`contradictions`/`drop` 按空数组处理，显式类型错误仍拒绝；文本忠实性不足则把 `line` 降级为组内最新记录的索引行并记入 `degraded`，时间戳按解析后的时刻判定并列。`planDream()` 只做计算，不做 IO。`brain.dreamPlan()` 与 `/brain dream [--json]` 读取原子替换后的文件后直接返回规划，不落盘。
+
+两条对抗审查后收紧的硬规则。其一，**记忆优先于风格**：`context()` 先用 header 预算挑选记忆，最后仅当 `header + 风格段 + 记忆块` 整体仍满足预算时才追加风格段，否则丢弃风格段；因此 `maxContextChars=300` 这类窄预算下保留的是一条记忆而不是中性风格句——风格是软偏好，事实是本体。其二，**索引行不得造词**：`line` 中每个中文二元组都必须出现在组内原文中（ASCII 词同样要求子集），任一行不满足即降级为抽取式索引行；原先的 0.6 覆盖率阈值会让「三点→四点」这类单词替换通过，等于把防伪造线降到 82%。此外 `title`/`line`/`brief`/`reason` 拒绝控制字符与双向覆盖字符，`drop` 的重复 id 去重。
+
+**为什么先不迁移 schema**：上述输出都可以从现有 `schemaVersion: 1` 状态重新计算，风格文案与候选组不是新的持久事实。把合并结果、索引或 dream 游标写入 `brain.json` 才会需要字段白名单、迁移器和回滚策略；在分组质量与真实使用反馈得到验证前，先保持零迁移可以把风险限制在只读路径。等合并语义稳定后，再单独设计 `schemaVersion: 2` 与显式迁移，本次不新增持久字段、不放宽 `validateState()` 白名单、不新增运行时依赖。
+
 ## 目标与验收
 
 为 DeepSeek Harness Desktop 提供可安装插件，让普通聊天积累长期记忆，并逐渐形成可解释、可控制的交流风格。性格指持久的语言行为偏好，不声称模型具有意识或真实情感。
@@ -44,6 +56,9 @@
 ## 结构
 
 - `lib/core.js`：纯 Node 核心 Brain 类，存储、记忆、检索、人格状态、历史；不依赖宿主。
+- `lib/text.js`：共享的 NFKC/空白归一化与 ASCII 词、中文单字/二元组分词。
+- `lib/style.js`：把五维 trait 确定性地渲染成自然语言风格段（三档、固定句子表）。
+- `lib/dream.js`：只读的候选分组、有界 payload、plan 校验与降级、规划入口。
 - `lib/context.js`：宿主当前参考消息替换、旧共享快照分节迁移、token 计量事件。
 - `lib/budget.js`：不依赖模型的 token 估算和 Unicode 安全输出预算。
 - `lib/extraction.js`：结构化提取协议、校验、证据约束、中文/英文明确偏好的离线兜底。
@@ -73,6 +88,7 @@
 - `personality()` → 包含维度、冻结状态、证据计数的快照。
 - `setPersonality({frozen?,traits?})`、`resetPersonality()`、`personalityHistory()`、`rollbackPersonality({version})`。
 - `exportData()`、`importData(data)`、`stats()`、`context({workspace,query})`。
+- `dreamPlan({threshold?,maxGroups?})` → `{groups,payload,stats}`；同步只读，读取原子替换后的文件后返回候选合并组，不写状态。
 - 实现补充同步只读属性 `personalityGeneration`：在用户消息到达时快照控制代数，传入 `learn`；冻结、重置等人工控制递增代数，阻止先前在途提取继续影响风格。工作区也在消息到达时快照，避免本轮中途切换目录导致记忆串项目。
 
 提取结果统一为 `{memories:[{text,kind,scope,key?,confidence,evidence}],feedback:[{trait,value,confidence,evidence}]}`；trait 为 warmth、verbosity、humor、proactivity、formality，value 为 [0,1] 目标值。evidence 必须是当前 userText 的逐字片段；模型输出和工具输出不作为用户偏好证据。禁止根据人口学特征推断风格。

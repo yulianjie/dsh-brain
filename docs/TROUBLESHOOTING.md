@@ -18,7 +18,7 @@ store. CLI commands other than help may initialize an empty store if none exists
 | CLI and Desktop show different state | Point the CLI at the same `dataDir`; a different environment or profile can use another store. |
 | Capacity reached | Inspect and explicitly forget obsolete records, or raise `maxMemories`. Lowering capacity does not erase existing data. |
 | Storage is corrupt or schema is unsupported | Stop writers and preserve the original file. Restore a known-good backup into a separate directory with the matching version; do not delete the damaged file to hide the error. |
-| Write lock times out | Stop the processes using that store and confirm the lock owner has exited. Only then manually remove that store's `.brain.lock` directory. Do not remove a live writer's lock or the entire data directory. |
+| Write lock times out | A same-host `.brain.lock` left by a crashed process is reclaimed automatically once that pid is confirmed gone. For any other case (different host, missing `host`, a live owner, or a stuck `.brain.lock.takeover`), stop the processes using that store and confirm the lock owner has exited; only then manually remove `.brain.lock` (and `.brain.lock.takeover` if present). Do not remove a live writer's lock or the entire data directory. |
 | Uninstall leaves data | This is intentional. Export first, verify the actual store path, stop its writers, then remove it yourself if desired. |
 
 To isolate a CLI problem in PowerShell:
