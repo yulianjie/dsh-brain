@@ -1,5 +1,16 @@
 # DSH Brain 验证记录
 
+## v0.5.0：写时去重与价值门槛（2026-10-31）
+
+main 合入后、发布前的验证记录。开发环境为 Windows 11、Node.js 24.14.1；CI 为 GitHub Actions 托管运行器（Windows/Linux/macOS × Node 22/24）。测试使用临时合成目录，没有读取或改动日常 desktop profile 与已有长期记忆。
+
+- `npm run verify`：语法、文档链接、包元数据检查，214 项测试及 tarball 干净安装检查通过，含 23 项新增回归测试（dedup 16 项、gate 7 项）。CI 在 main 头提交（f9a9c54）六个矩阵任务全部通过（2026-10-31）。
+- 实现与验证分工：实现与独立对抗验证由两个互不共享上下文的子 agent 完成。对抗验证覆盖：守门误杀/漏放探针（英文 CI/test 词汇带存在系统性误杀面，确认为保守锚定设计的既定取舍；完成态「了」后缀与英文词形漏放据此收紧）；合并信息丢失探针（canonical key 碰撞零词项重叠防护由该轮结论加入）；「船长/水手虫虫/gh」三组实测数据端到端重放；文档与代码一致性逐项核对（唯一必修项为 CHANGELOG 与正则的措辞不一致，已按收紧方向修复）。Lead 复审全量 diff 并亲测两轮 `npm run verify`。
+- 三组实测重放结论：model-tool 富文本 + 模型提取（跨 key 命名风格）+ fallback 逐字复述收敛为一条并保留富文本；语义级转述在模型缺席时可能低于一切确定性阈值（实测 Jaccard 0.065）而并存——已记入设计文档「已知边界」。
+- 未重新执行 Desktop bundled runtime 冒烟与原生窗口验收：本版本只改 lib 层写入/提取路径与文档，`lib/index.js` 仅扩展提取 prompt、注入只读既有记忆上下文并扩展工具返回字段，0.4.0 的运行时记录仍适用。
+
+验证边界：没有真实网络模型验收（updateOf 协议与 EXISTING 上下文仅在合成流下验证）；没有在其他宿主版本上验证。
+
 ## v0.4.1：Windows 锁争用与改名重试（2026-10-31）
 
 修复在 main 合入后、发布前的验证记录。开发环境为 Windows 11、Node.js 24.14.1；CI 为 GitHub Actions 托管运行器（Windows/Linux/macOS × Node 22/24）。测试使用临时合成目录，没有读取或改动日常 desktop profile 与已有长期记忆。
