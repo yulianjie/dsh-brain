@@ -1,5 +1,16 @@
 # DSH Brain 验证记录
 
+## v0.4.1：Windows 锁争用与改名重试（2026-10-31）
+
+修复在 main 合入后、发布前的验证记录。开发环境为 Windows 11、Node.js 24.14.1；CI 为 GitHub Actions 托管运行器（Windows/Linux/macOS × Node 22/24）。测试使用临时合成目录，没有读取或改动日常 desktop profile 与已有长期记忆。
+
+- `npm run verify`：语法、文档链接、包元数据检查，191 项测试及 tarball 干净安装检查通过（含两项修复的回归测试）。CI 在 main 头提交（bae6919）六个矩阵任务全部通过（2026-10-31）。
+- 回归测试共 12 项：改名重试 5 项（瞬时 `EPERM` 突发重试、永久失败浮现原始错误、非瞬时错误码不重试、非 Windows 不重试、abort 中止保留原存储）；锁争用 7 项（`EPERM`/`EBUSY` 按争用有界等待、不可创建的锁目录报路径、旧 `EPERM` 不污染后续 `EEXIST` 超时判断、`fs.rm` 有界重试解锁、已存在目录报 "locked"、接管清理失败不中断写入、争用状态按最近失败重置）。
+- 发布自动化：`v0.4.1` tag 触发 `.github/workflows/release.yml`，发布前重新执行同一 `npm run verify`，单一 `npm pack` 出包，GitHub Release 与 npm 使用同一 tarball，发布后回读 registry 比对 SHA256。
+- 未重新执行 Desktop bundled runtime 冒烟与原生窗口验收：本版本只改 `lib/core.js` 写入路径与发布基础设施，0.4.0 的运行时记录仍适用。
+
+验证边界：没有真实网络模型验收；没有在其他宿主版本上验证。
+
 ## v0.4.0：风格文本化、dream 规划与风格学习加固（2026-10-30）
 
 测试环境为 Windows 11、Node.js 24.14.1、Desktop bundled agent-loop 0.2.1-rc.3 / Cordis 4.0.5。所有验证使用临时合成目录，没有读取或改动日常 desktop profile 与已有长期记忆。

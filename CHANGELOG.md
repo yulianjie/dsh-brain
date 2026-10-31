@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 — 2026-10-31
 
 - Fix intermittent Windows failures when concurrent writers contend for
   `.brain.lock`: NTFS reports a directory that another writer is creating or

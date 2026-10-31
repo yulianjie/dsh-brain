@@ -25,7 +25,7 @@
 
 ## 兼容性
 
-当前版本 `0.4.0`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
+当前版本 `0.4.1`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
 
 | 层级 | 支持与验证范围 |
 | --- | --- |
@@ -44,21 +44,21 @@
 
 ```powershell
 $dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
-& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.4.0'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.4.1'
 ```
 
-只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.4.0`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
+只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.4.1`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
 
 ### 从 GitHub Release 安装
 
-从 [v0.4.0 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.4.0) 下载 `yulianjie-dsh-brain-0.4.0.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
+从 [v0.4.1 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.4.1) 下载 `yulianjie-dsh-brain-0.4.1.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
 
 ```powershell
 $expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
-$actual = (Get-FileHash .\yulianjie-dsh-brain-0.4.0.tgz -Algorithm SHA256).Hash
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.4.1.tgz -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'SHA256 mismatch' }
-tar -xf .\yulianjie-dsh-brain-0.4.0.tgz
-.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.0.tgz
+tar -xf .\yulianjie-dsh-brain-0.4.1.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.1.tgz
 ```
 
 安装仍需下载 npm 依赖；tarball 未内置 `node_modules`。
@@ -73,7 +73,7 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.0.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.1.tgz
 ```
 
 重启 Desktop 后，在插件列表确认 `@yulianjie/dsh-brain`，再用 `/brain status` 检查状态。可以先用 `/brain remember global 我喜欢中文回答` 保存一条明确偏好，并通过 `/brain list global` 查看。
@@ -84,7 +84,7 @@ npm.cmd pack
 
 ```powershell
 .\scripts\install.ps1 -DryRun
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.1.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
