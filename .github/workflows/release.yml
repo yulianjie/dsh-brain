@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677282 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org/
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Verify (syntax, links, tests, package check)
+        run: npm run verify
+      - name: Check whitespace
+        run: git diff --check
+      - name: Check tag, version and changelog agree
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+          if ! grep -Eq "^## $version( |$)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## $version' section"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Pack tarball and checksum
+        run: |
+          mkdir -p dist
+          npm pack --pack-destination dist
+          (cd dist && sha256sum "yulianjie-dsh-brain-$VERSION.tgz" > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt
+      - name: Attach assets to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=("dist/yulianjie-dsh-brain-$VERSION.tgz" "dist/SHA256SUMS.txt")
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+      - name: Publish the same tarball to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::Secret NPM_AUTOMATION_TOKEN is not configured (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          if npm view "@yulianjie/dsh-brain@$VERSION" dist.integrity >/dev/null 2>&1; then
+            echo "@yulianjie/dsh-brain@$VERSION is already on npm; skipping publish."
+            exit 0
+          fi
+          case "$VERSION" in
+            *-*) dist_tag=next ;;
+            *) dist_tag=latest ;;
+          esac
+          npm publish "dist/yulianjie-dsh-brain-$VERSION.tgz" --access public --tag "$dist_tag"
+      - name: Verify the registry tarball matches the GitHub asset
+        run: |
+          mkdir -p registry
+          npm pack "@yulianjie/dsh-brain@$VERSION" --pack-destination registry
+          local_sha="$(sha256sum "dist/yulianjie-dsh-brain-$VERSION.tgz" | awk '{print $1}')"
+          registry_sha="$(sha256sum "registry/yulianjie-dsh-brain-$VERSION.tgz" | awk '{print $1}')"
+          echo "GitHub asset sha256: $local_sha"
+          echo "npm registry sha256: $registry_sha"
+          if [ "$local_sha" != "$registry_sha" ]; then
+            echo "::error::The npm registry tarball differs from the tarball attached to the GitHub release."
+            exit 1
+          fi

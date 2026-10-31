@@ -4,6 +4,27 @@ The published npm package is `@yulianjie/dsh-brain`; the unscoped name belongs t
 another project. Releases use `yulianjie-dsh-brain-<version>.tgz` and `SHA256SUMS.txt`.
 Publish the same tarball to GitHub and npm; do not rebuild independently afterward.
 
+## Automated release
+
+`.github/workflows/release.yml` automates checklist steps 5–7 whenever a
+`v<version>` tag is pushed. The tag must match `package.json` and have a
+`## <version>` section in `CHANGELOG.md`. The workflow runs `npm ci`,
+`npm run verify` and `git diff --check`, packs the tarball, writes
+`SHA256SUMS.txt`, attaches both files to the matching GitHub release, publishes
+that exact tarball to npm, then re-downloads it from the registry to confirm
+the checksums match. Prerelease versions (containing `-`) publish under the
+`next` dist-tag so `latest` is untouched.
+
+Before the first automated release, configure the `NPM_AUTOMATION_TOKEN`
+repository secret (Settings → Secrets and variables → Actions): an npm token
+with publish rights for `@yulianjie/dsh-brain` (a classic Automation token, or
+a granular token with read/write on this package). Keep tokens out of
+repository files and logs. GitHub resolves tag workflows from the tagged
+commit itself, so merge the workflow to `main` before pushing the tag.
+
+The checklist below is the manual path; use it when Actions publishing is
+unavailable or for an audit of what the workflow does.
+
 1. Review changes, dependency licenses and the data schema. Keep `package.json`
    and `package-lock.json` versions aligned; update `CHANGELOG.md` and installation
    examples for a new version. Use a new version for a published package whose
