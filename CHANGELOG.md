@@ -19,6 +19,20 @@
   from the most recent failure alone, so an old `EPERM` cannot poison a later
   `EEXIST` wait. Regression tests cover `EPERM`, `EBUSY` and the contention
   reset.
+- Fix lost writes on Windows when another handle has `brain.json` open. The
+  final rename over the store fails with `EPERM` while an unlocked reader
+  (`list`, `search`, `personality`, `stats`, the `context()` call made for every
+  prompt, or the `personalityGeneration` getter) holds the file, so a CLI write
+  could fail while Desktop built a prompt and a background learning write could
+  fail while a `context()` read overlapped it. `Brain._write` now retries that
+  rename on Windows for `EPERM`, `EACCES` and `EBUSY` with a 1-5 ms backoff for
+  up to 5 seconds, still under the store lock and still honoring abort signals
+  and temp-file cleanup. Other platforms and other error codes are unchanged.
+  A failure that never clears (for example a read-only `brain.json`) now
+  surfaces its original error after those 5 seconds instead of at once, with
+  the store untouched. Regression tests inject the Windows error for a
+  transient burst, a permanent failure, a non-transient code, a non-Windows
+  platform and an abort during the retry.
 
 ## 0.4.0 — 2026-10-30
 
