@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, hostname } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { promises as fsp } from 'node:fs';
 import { Brain } from '../lib/core.js';
 import { BRIEF_HEADER, styleBrief } from '../lib/style.js';
 
@@ -171,4 +172,144 @@ test('multiple instances and processes serialize independent writes', async t =>
   });
   await Promise.all([run(1), run(2), run(3)]);
   assert.equal((await brain.list()).length, 56);
+});
+
+/** Windows reports a lock directory that a concurrent writer is creating or
+ * removing at that instant as EPERM/EBUSY instead of EEXIST. */
+function failLockMkdir(t, lockDir, failure) {
+  const original = fsp.mkdir;
+  fsp.mkdir = async (target, ...rest) => {
+    if (path.resolve(target) === path.resolve(lockDir)) failure();
+    return original(target, ...rest);
+  };
+  t.after(() => { fsp.mkdir = original; });
+}
+const lockError = code => Object.assign(new Error(`${code}: lock directory mkdir failed`), { code });
+const eperm = () => lockError('EPERM');
+
+test('a transient lock mkdir EPERM is retried instead of failing the write', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-core-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  let remaining = 3;
+  failLockMkdir(t, path.join(dataDir, '.brain.lock'), () => { if (remaining-- > 0) throw eperm(); });
+  const brain = new Brain({ dataDir });
+  await brain.init();
+  await brain.remember({ text: '写入在锁目录短暂 EPERM 后仍然成功', scope: 'global' });
+  assert.equal((await new Brain({ dataDir }).list()).length, 1);
+});
+
+test('a transient lock mkdir EBUSY is retried instead of failing the write', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-core-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  let remaining = 3;
+  failLockMkdir(t, path.join(dataDir, '.brain.lock'), () => { if (remaining-- > 0) throw lockError('EBUSY'); });
+  const brain = new Brain({ dataDir });
+  await brain.init();
+  await brain.remember({ text: '写入在锁目录短暂 EBUSY 后仍然成功', scope: 'global' });
+  assert.equal((await new Brain({ dataDir }).list()).length, 1);
+});
+
+test('an uncreatable lock directory reports the path instead of a misleading lock owner', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-core-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  failLockMkdir(t, path.join(dataDir, '.brain.lock'), () => { throw eperm(); });
+  const brain = new Brain({ dataDir, lockTimeoutMs: 250 });
+  await assert.rejects(brain.init(), error => {
+    assert.match(error.message, /cannot be created/i);
+    assert.match(error.message, /\.brain\.lock/);
+    assert.equal(error.code, 'EPERM');
+    assert.equal(error.cause?.code, 'EPERM');
+    return true;
+  });
+});
+
+test('a stale EPERM does not misreport a lock timeout once later attempts see EEXIST', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-core-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const lockDir = path.join(dataDir, '.brain.lock');
+  const originalMkdir = fsp.mkdir, originalAccess = fsp.access;
+  let attempts = 0;
+  // Only the first attempt fails with EPERM; every later one reports the directory
+  // as present, and access() says it is gone at the timeout instant. Only the
+  // latest failure may decide the message, so this must be reported as a lock.
+  fsp.mkdir = async (target, ...rest) => {
+    if (path.resolve(target) === path.resolve(lockDir)) throw attempts++ === 0 ? lockError('EPERM') : lockError('EEXIST');
+    return originalMkdir(target, ...rest);
+  };
+  fsp.access = async (target, ...rest) => {
+    if (path.resolve(target) === path.resolve(lockDir)) throw Object.assign(new Error('ENOENT: no such file or directory, access'), { code: 'ENOENT' });
+    return originalAccess(target, ...rest);
+  };
+  t.after(() => { fsp.mkdir = originalMkdir; fsp.access = originalAccess; });
+  const brain = new Brain({ dataDir, lockTimeoutMs: 200 });
+  await assert.rejects(brain.init(), error => {
+    assert.match(error.message, /Brain store is locked/);
+    assert.doesNotMatch(error.message, /cannot be created/i);
+    return true;
+  });
+});
+
+test('unlocking removes the lock directory through fs.rm with bounded retries', async t => {
+  const { brain } = await fixture(t);
+  const lockDir = path.join(brain.dataDir, '.brain.lock');
+  const original = fsp.rm;
+  const calls = [];
+  fsp.rm = async (target, options) => {
+    if (path.resolve(target) === path.resolve(lockDir)) calls.push(options);
+    return original(target, options);
+  };
+  t.after(() => { fsp.rm = original; });
+  await brain.remember({ text: '解锁通过 fs.rm 删除锁目录', scope: 'global' });
+  const options = calls.at(-1);
+  assert.ok(options, 'expected fs.rm to be called for the lock directory');
+  assert.equal(options.recursive, true);
+  assert.equal(options.force, true);
+  assert.equal(options.maxRetries, 4);
+  assert.equal(options.retryDelay, 10);
+  await assert.rejects(fsp.access(lockDir));
+});
+
+test('an existing lock directory is reported as a lock even when mkdir keeps failing', async t => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-core-'));
+  const lockDir = path.join(dataDir, '.brain.lock');
+  // The directory exists, so the path itself is not the problem: only the
+  // visibility of it at the timeout instant separates a lock from a filesystem
+  // failure. No owner.json: _staleOwner() reads nothing and reclaims nothing.
+  await fsp.mkdir(lockDir);
+  const originalMkdir = fsp.mkdir;
+  fsp.mkdir = async (target, ...rest) => {
+    if (path.resolve(target) === path.resolve(lockDir)) throw eperm();
+    return originalMkdir(target, ...rest);
+  };
+  t.after(async () => {
+    fsp.mkdir = originalMkdir;
+    await rm(dataDir, { recursive: true, force: true });
+  });
+  const brain = new Brain({ dataDir, lockTimeoutMs: 200 });
+  await assert.rejects(brain.init(), error => {
+    assert.match(error.message, /Brain store is locked/);
+    assert.doesNotMatch(error.message, /cannot be created/i);
+    return true;
+  });
+});
+
+test('a failed takeover cleanup does not interrupt the write that reclaimed a stale lock', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const lockDir = path.join(dataDir, '.brain.lock');
+  const takeoverDir = path.join(dataDir, '.brain.lock.takeover');
+  // A crash left its lock behind: the pid is gone on this host, so the write
+  // below reclaims it through the takeover directory.
+  await fsp.mkdir(lockDir);
+  await writeFile(path.join(lockDir, 'owner.json'), JSON.stringify({ pid: 999999, token: 'stale-token', at: Date.now(), host: hostname() }));
+  const originalRm = fsp.rm;
+  fsp.rm = async (target, options) => {
+    if (path.resolve(target) === path.resolve(takeoverDir)) throw eperm();
+    return originalRm(target, options);
+  };
+  t.after(async () => {
+    fsp.rm = originalRm;
+    await rm(dataDir, { recursive: true, force: true });
+  });
+  await brain.remember({ text: '接管目录清理失败不应中断写入', scope: 'global' });
+  assert.equal((await brain.list()).length, 1);
 });
