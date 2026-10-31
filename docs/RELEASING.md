@@ -11,9 +11,12 @@ Publish the same tarball to GitHub and npm; do not rebuild independently afterwa
 `## <version>` section in `CHANGELOG.md`. The workflow runs `npm ci`,
 `npm run verify` and `git diff --check`, packs the tarball, writes
 `SHA256SUMS.txt`, attaches both files to the matching GitHub release, publishes
-that exact tarball to npm, then re-downloads it from the registry to confirm
-the checksums match. Prerelease versions (containing `-`) publish under the
-`next` dist-tag so `latest` is untouched.
+that exact tarball to npm, then re-downloads both the GitHub release asset and
+the registry tarball to confirm the checksums match, retrying while the
+registry makes a fresh version visible. Prerelease versions (containing `-`)
+publish under the `next` dist-tag so `latest` is untouched. A version already
+on npm is only verified, never rebuilt or replaced, so re-running a release
+workflow is safe.
 
 Before the first automated release, configure the `NPM_AUTOMATION_TOKEN`
 repository secret (Settings → Secrets and variables → Actions): an npm token

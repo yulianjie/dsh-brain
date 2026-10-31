@@ -44,13 +44,28 @@ jobs:
             exit 1
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Check whether this version is already on npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::Secret NPM_AUTOMATION_TOKEN is not configured (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          if npm view "@yulianjie/dsh-brain@$VERSION" dist.integrity >/dev/null 2>&1; then
+            echo "ALREADY_PUBLISHED=1" >> "$GITHUB_ENV"
+          else
+            echo "ALREADY_PUBLISHED=0" >> "$GITHUB_ENV"
+          fi
       - name: Pack tarball and checksum
+        if: env.ALREADY_PUBLISHED == '0'
         run: |
           mkdir -p dist
           npm pack --pack-destination dist
           (cd dist && sha256sum "yulianjie-dsh-brain-$VERSION.tgz" > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
       - name: Attach assets to the GitHub release
+        if: env.ALREADY_PUBLISHED == '0'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -61,31 +76,37 @@ jobs:
             gh release create "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
           fi
       - name: Publish the same tarball to npm
+        if: env.ALREADY_PUBLISHED == '0'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTOMATION_TOKEN }}
         run: |
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "::error::Secret NPM_AUTOMATION_TOKEN is not configured (Settings > Secrets and variables > Actions)."
-            exit 1
-          fi
-          if npm view "@yulianjie/dsh-brain@$VERSION" dist.integrity >/dev/null 2>&1; then
-            echo "@yulianjie/dsh-brain@$VERSION is already on npm; skipping publish."
-            exit 0
-          fi
           case "$VERSION" in
             *-*) dist_tag=next ;;
             *) dist_tag=latest ;;
           esac
           npm publish "./dist/yulianjie-dsh-brain-$VERSION.tgz" --access public --tag "$dist_tag"
-      - name: Verify the registry tarball matches the GitHub asset
+      - name: Verify the registry tarball matches the GitHub release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p registry
-          npm pack "@yulianjie/dsh-brain@$VERSION" --pack-destination registry
-          local_sha="$(sha256sum "dist/yulianjie-dsh-brain-$VERSION.tgz" | awk '{print $1}')"
-          registry_sha="$(sha256sum "registry/yulianjie-dsh-brain-$VERSION.tgz" | awk '{print $1}')"
-          echo "GitHub asset sha256: $local_sha"
-          echo "npm registry sha256: $registry_sha"
-          if [ "$local_sha" != "$registry_sha" ]; then
+          mkdir -p check/asset check/registry
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "yulianjie-dsh-brain-$VERSION.tgz" --dir check/asset
+          for attempt in 1 2 3 4 5 6 7 8 9; do
+            if npm pack "@yulianjie/dsh-brain@$VERSION" --pack-destination check/registry >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" = 9 ]; then
+              echo "::error::@yulianjie/dsh-brain@$VERSION did not appear on the npm registry."
+              exit 1
+            fi
+            echo "Attempt $attempt of 9: version not visible on the npm registry yet; retrying in 10 seconds."
+            sleep 10
+          done
+          asset_sha="$(sha256sum "check/asset/yulianjie-dsh-brain-$VERSION.tgz" | awk '{print $1}')"
+          registry_sha="$(sha256sum "check/registry/yulianjie-dsh-brain-$VERSION.tgz" | awk '{print $1}')"
+          echo "GitHub release asset sha256: $asset_sha"
+          echo "npm registry tarball sha256: $registry_sha"
+          if [ "$asset_sha" != "$registry_sha" ]; then
             echo "::error::The npm registry tarball differs from the tarball attached to the GitHub release."
             exit 1
           fi
