@@ -263,10 +263,13 @@ test('an abort during the store rename retry stops it and leaves the store uncha
 test('multiple instances and processes serialize independent writes', async t => {
   const { brain, dataDir } = await fixture(t);
   const others = await Promise.all(Array.from({ length: 4 }, () => new Brain({ dataDir }).init()));
-  await Promise.all(others.flatMap((instance, i) => Array.from({ length: 8 }, (_, j) => instance.remember({ text: `instance-${i}-${j}`, scope: 'global' }))));
+  // v0.5 write-time merging treats texts with identical term sets (digit
+  // swaps such as instance-0-1 / instance-1-0) as duplicates, so every write
+  // keeps a distinct term set by fusing i and j into one token.
+  await Promise.all(others.flatMap((instance, i) => Array.from({ length: 8 }, (_, j) => instance.remember({ text: `instance-${i}${j}`, scope: 'global' }))));
   const moduleURL = new URL('../lib/core.js', import.meta.url).href;
   const run = i => new Promise((resolve, reject) => {
-    const script = `import {Brain} from ${JSON.stringify(moduleURL)}; const b=await new Brain({dataDir:${JSON.stringify(dataDir)}}).init(); for(let j=0;j<8;j++) await b.remember({text:'child-${i}-'+j,scope:'global'});`;
+    const script = `import {Brain} from ${JSON.stringify(moduleURL)}; const b=await new Brain({dataDir:${JSON.stringify(dataDir)}}).init(); for(let j=0;j<8;j++) await b.remember({text:'child-${i}'+j,scope:'global'});`;
     const child = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: ['ignore', 'pipe', 'pipe'] });
     let error = ''; child.stderr.on('data', chunk => error += chunk);
     child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(new Error(error)));

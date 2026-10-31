@@ -32,6 +32,46 @@ v0.4 第一阶段先解决两个只读问题：模型如何直接理解风格偏
 
 **为什么先不迁移 schema**：上述输出都可以从现有 `schemaVersion: 1` 状态重新计算，风格文案与候选组不是新的持久事实。把合并结果、索引或 dream 游标写入 `brain.json` 才会需要字段白名单、迁移器和回滚策略；在分组质量与真实使用反馈得到验证前，先保持零迁移可以把风险限制在只读路径。等合并语义稳定后，再单独设计 `schemaVersion: 2` 与显式迁移，本次不新增持久字段、不放宽 `validateState()` 白名单、不新增运行时依赖。
 
+## v0.5：写时去重与价值门槛
+
+v0.5 修两个已确认的写入缺陷：同一偏好以多条近似记录并存（三条写入路径的 key 命名风格不同、措辞转述无法命中旧的精确匹配），以及瞬时任务状态（CI 状态、测试结果、分支名）被模型提取路径存成 fact。方案是写入端的三层防线，继续保持 `schemaVersion: 1`、零新增持久字段。
+
+### 调研依据（按行为级表述）
+
+- **Codex**（提示词与官方配置参考的行为，两份报告交叉一致）：写任何记忆前先问「未来的 agent 会因为这条内容而合理地表现更好吗」，否即 no-op 且 no-op 被偏好；明确不存一次性查询、无 takeaways 的状态更新、临时事实、未采纳的 assistant 提议与泛泛建议；整合期「两条内容若导致相同未来行为则合并，保留更尖锐的那条」，关键词重叠本身不构成合并理由，拿不准时保留边界。
+- **mem0**（arXiv:2504.19413 与仓库源码）：写时四元组决策 ADD/UPDATE/DELETE/NOOP，检索 top-10 相似记忆交给 LLM 判定；UPDATE 保留旧 id；「传达同一件事时保留信息量最大的一条」，同义且信息量不增则 NOOP；主判定交模型语义判断，数值阈值只用于低层精确匹配。
+- **Claude**（官方文档与产品文本）：写入门槛是「would be useful in a future conversation」；可重新查询的数据、可重新推导的建议、自带时效的陈述（停车位、天气、当前分支）不存；read-before-write 的可见性移植为 `brain_remember` 返回 `merged` 标志。
+- **Letta**：durable 才入记忆，/doctor 审计重复，合并前可备份。
+
+形态适配结论：dsh-brain 是本地单文件、无后台服务、注入预算有限，取 mem0 写时四元组决策 + Codex 会话资格过滤的「写入端把好关」路线，而非 v3 ADD-only + 云端整合路线；文档引用按行为级表述。
+
+### 三层防线
+
+**层 1 确定性去重合并（`lib/core.js` `_remember`）**。同 scope+workspace 内按优先级首中即止：(a) 精确 key；(b) 归一化文本精确；(c) canonical key（`canonicalKey` 取小写字母数字，两侧均 ≥8 码位，短 key 不合并；canonical 相等还要求两文本至少共享一个词项，零重叠的不同事实不因 key 碰撞合并——「关键词重叠是佐证而非理由」的逆命题）；(d) 归一化文本包含关系且较短侧 ≥6 码位；(e) term-Jaccard ≥ 0.75（复用 `lib/text.js` 分词与 dream 同款 `similarity()`，后者从 dream.js 移到 text.js 导出）。多条匹配取优先级最高、其次数组顺序最早的一条，结果确定。
+
+**合并策略（informative，「保留信息量最大」）**适用于一切去重命中与模型 updateOf：新文本归一化长度 ≥ 既有 × 0.6 时新文本胜出（纠正/更新语义保留）；短于 60% 时保留既有文本仅刷新 updatedAt（防短促重述降级富文本）。保留既有 id/createdAt；confidence 取两侧最大；key 取既有 key ?? 新 key；kind/source 跟随胜出文本；personalityTraits 并集。例外：`automatic=false` 且显式 `id` 的写入维持纯替换语义（模型工具点名改写与 CLI `update` 不受 60% 规则约束）。`brain_remember` 工具返回增加 `merged` 布尔标志并在描述中说明合并语义。
+
+**为什么 0.75 而不是 dream 的 0.6**：dream 是人工复核候选的只读门槛，写时自动合并没有复核环节，取更高门槛减少误合并；实测的重复案例（0.857 一档）仍被覆盖，0.6–0.75 区间的转述交由模型层 updateOf 处理，两条阈值之间的对继续作为 dream 候选保留边界。
+
+**层 2 记忆价值门槛（`lib/extraction.js` `validateExtraction`，只作用于 memories 分支）**。豁免优先：包含句以「请记住/记住/remember」开头或含 durable cue（以后/今后/往后/一直/每次/总是/always/from now on，与风格学习共用同一 `durableCue` 集合）则不过滤。拒绝模式为锚定式、作用于 evidence 本身：纯 URL、git ref 形状（无空格与中文的 `owner/shape`）、`文件.扩展名:行号`、`结果|状态|进度|输出|日志` 引导、状态 emoji 引导、状态收尾谓词（有问题/报错/失败了/没通过了/修好了/消失了…，含完成态「了」后缀）、测试与构建结果快照（`N 个测试全部通过`、verify/ci/build + pass/passes/passing/fail/fails/failing/passed/failed/green/red）。命中即 `rejected++` 丢弃；feedback 分支与离线 fallback 的产物（请记住句、风格句）不受影响。
+
+**层 3 模型路径语义判定（`lib/index.js` + extraction + core）**。`extract()` 注入 top-10 同 scope 相似既有记忆为 `EXISTING` 上下文（id + key + 文本截 200 码位，只读快照，读取失败降级为空列表）；`EXTRACTION_PROMPT` 与独立构造器 `extractionPrompt()` 加入价值门槛与时效措辞；模型可对重述/更新的候选返回 `updateOf`（非空字符串 ≤100，`validateExtraction` 透传，存在性不在此校验），`learn()` 在同一事务内校验目标（同 scope、workspace 时同路径）——命中则按 informative 策略更新该条，未命中（已被删除或跨 scope，防 TOCTOU）降级为普通新增，不抛错。
+
+### 明确不做（后续方向）
+
+- 后台整合（Kairos/AutoDream 式 idle 后全局整合、24h 门控）：先验证写时防线效果，dream 保持只读。
+- 老化淘汰（last_used/30 天未用）：需新增持久字段，超出本次零迁移边界。
+- 会话 idle ≥6h 才提取：交互式桌面场景不适用。
+- 冲突 DELETE/自动矛盾消解：dream 矛盾检测保持只读、人工确认。
+- processedTurns/tombstones 无上限：独立问题另行处理。
+
+### 已知边界（对抗性验证确认的取舍）
+
+- **离线 fallback 的语义级转述不收敛**：模型缺席时，转述句与既有记录可能低于一切确定性阈值（实测 Jaccard 0.065）且不构成包含关系——该形态需要模型层 updateOf 在线才能合并；逐字复述（包含关系）可以收敛。实测「船长」三连中的 fallback 转述会与富文本记录并存。
+- **包含关系合并可翻转否定**：「不要总是主动建议」被「总是主动建议」包含式合并且新文本胜出时否定丢失——这是「重述即纠正」语义的固有取舍，与显式 id 改写的纯替换语义一致。
+- **守门按锚定保守设计允许漏放**：「测试全绿」「pr 123 已经合并了」等口语化状态仍可能通过；英文 CI/test 词汇带（无 always/以后 等耐久措辞时）存在系统性误杀可能。误杀可由「请记住：」显式意图豁免找回。
+- **canonical key 同主题碰撞仍可能合并**：零词项重叠已挡；共享个别词项的不同事实若碰巧同名 key，仍会被合并——低概率残余风险。
+
 ## 目标与验收
 
 为 DeepSeek Harness Desktop 提供可安装插件，让普通聊天积累长期记忆，并逐渐形成可解释、可控制的交流风格。性格指持久的语言行为偏好，不声称模型具有意识或真实情感。

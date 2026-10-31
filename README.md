@@ -11,7 +11,7 @@
 
 ## 功能一览
 
-- **跨会话记忆**：全局偏好与工作区事实分开检索，支持中英文、纠正合并及删除去重。
+- **跨会话记忆**：全局偏好与工作区事实分开检索，支持中英文；相似记忆在写入时合并进既有记录，瞬时任务状态过不了提取的价值门槛，删除有去重标记。
 - **有证据的自动学习**：只处理已完成根轮次的用户文本，限制模型调用、超时与后台队列。
 - **可控交流风格**：五维渐进调整，以及自动、手动、关闭模式；支持冻结、历史和回退。
 - **原生配置与管理**：Desktop 中的 23 项设置、`/brain` 命令、六个模型工具和本地 CLI。
@@ -25,7 +25,7 @@
 
 ## 兼容性
 
-当前版本 `0.4.1`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
+当前版本 `0.5.0`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
 
 | 层级 | 支持与验证范围 |
 | --- | --- |
@@ -44,21 +44,21 @@
 
 ```powershell
 $dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
-& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.4.1'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.5.0'
 ```
 
-只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.4.1`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
+只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.5.0`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
 
 ### 从 GitHub Release 安装
 
-从 [v0.4.1 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.4.1) 下载 `yulianjie-dsh-brain-0.4.1.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
+从 [v0.5.0 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.5.0) 下载 `yulianjie-dsh-brain-0.5.0.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
 
 ```powershell
 $expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
-$actual = (Get-FileHash .\yulianjie-dsh-brain-0.4.1.tgz -Algorithm SHA256).Hash
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.5.0.tgz -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'SHA256 mismatch' }
-tar -xf .\yulianjie-dsh-brain-0.4.1.tgz
-.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.1.tgz
+tar -xf .\yulianjie-dsh-brain-0.5.0.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz
 ```
 
 安装仍需下载 npm 依赖；tarball 未内置 `node_modules`。
@@ -73,7 +73,7 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.1.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz
 ```
 
 重启 Desktop 后，在插件列表确认 `@yulianjie/dsh-brain`，再用 `/brain status` 检查状态。可以先用 `/brain remember global 我喜欢中文回答` 保存一条明确偏好，并通过 `/brain list global` 查看。
@@ -84,7 +84,7 @@ npm.cmd pack
 
 ```powershell
 .\scripts\install.ps1 -DryRun
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.1.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
@@ -129,7 +129,7 @@ npm.cmd pack
 | `/brain history` | 查看有限变更历史 |
 | `/brain rollback <version>` | 回退到已有历史版本 |
 
-`remember` 省略范围时，有会话工作区则使用 `workspace`，否则使用 `global`。模型也可调用 `brain_search`、`brain_list`、`brain_read`、`brain_remember`、`brain_forget`、`brain_personality` 六个工具。导入导出和破坏性风格控制由用户命令或本地 CLI 执行。
+`remember` 省略范围时，有会话工作区则使用 `workspace`，否则使用 `global`。模型也可调用 `brain_search`、`brain_list`、`brain_read`、`brain_remember`、`brain_forget`、`brain_personality` 六个工具。同 scope 的相似记忆（含模型工具写入）会合并进既有记录而不是新建重复，`brain_remember` 的返回以 `merged:true` 标记这种情况。导入导出和破坏性风格控制由用户命令或本地 CLI 执行。
 
 范围边界：全局偏好可用于所有项目；工作区事实仅提供给路径相同的会话。工作区由宿主会话 cwd 获取，不使用插件进程的 cwd 猜测。它按目录路径隔离，工作区改名或迁移后需要重新整理记录。
 

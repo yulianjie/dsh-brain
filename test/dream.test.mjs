@@ -289,14 +289,19 @@ test('Brain.dreamPlan groups durable memories and context injects the text brief
   const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-dream-'));
   t.after(() => rm(dataDir, { recursive: true, force: true }));
   const brain = await new Brain({ dataDir }).init();
-  for (const text of [
+  // v0.5 merges near-duplicates at write time, so a store that still contains
+  // candidate groups is seeded the way a pre-v0.5 backup restores one: through
+  // importData, which keeps every record verbatim instead of merging writes.
+  const seed = await brain.exportData();
+  seed.memories = [
     '周会固定在每周五下午三点。',
     '周会固定在每周五下午四点。',
     '部署流程使用 Docker 和 Kubernetes。',
     '部署流程使用 Docker 和 Helm。',
     '数据库迁移使用 Flyway。',
     '界面配色遵循品牌规范。',
-  ]) await brain.remember({ text, scope: 'global' });
+  ].map((text, index) => record(`dream-${index}`, text));
+  await brain.importData(seed);
   const before = await readFile(brain.file, 'utf8');
   const beforeStat = await stat(brain.file);
   const plan = brain.dreamPlan();

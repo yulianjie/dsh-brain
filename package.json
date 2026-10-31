@@ -1,6 +1,6 @@
 {
   "name": "@yulianjie/dsh-brain",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Local long-term memory and gradual, user-controlled conversation style for DeepSeek Harness Desktop",
   "repository": {
     "type": "git",

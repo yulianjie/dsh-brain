@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.5.0 — 2026-10-31
+
+- Write-time deduplication merging. `_remember` now matches a candidate against
+  existing records in the same scope and workspace through five deterministic
+  criteria, first match wins: exact key, exact normalized text, canonical key
+  (`canonicalKey` = lowercase letters/digits, both sides at least 8 code points,
+  so kebab-case and snake_case spellings of one semantic key merge — and the two
+  texts must also share at least one term, so unrelated facts with colliding
+  keys stay separate), containment
+  of one normalized text in the other (shorter side at least 6 code points), and
+  term-Jaccard similarity of at least 0.75 using the shared `lib/text.js`
+  tokenizer. A hit merges instead of appending a near-duplicate: the record
+  keeps the existing id and createdAt, refreshes updatedAt, takes the maximum
+  confidence, prefers the existing key, and follows the mem0 "most informative"
+  rule for text — a restatement shorter than 60% of the stored text loses to the
+  stored text, anything at least that substantial wins as a correction.
+  `kind` and `source` follow the winning text; `personalityTraits` take the
+  union. The 0.75 bar sits above dream's 0.6 human-review threshold on purpose:
+  an automatic write-time merge has no review step, and pairs between the two
+  thresholds remain dream review candidates. `similarity()` moved from
+  `lib/dream.js` to `lib/text.js` (dream imports it; behavior unchanged).
+  Explicit manual rewrites — `automatic=false` with an id — keep the previous
+  pure replacement semantics, so `brain_remember` with `id` and the CLI
+  `update` command still replace text verbatim.
+- The `brain_remember` tool result now includes `merged: boolean` (true when the
+  write updated an existing record instead of creating one), and its
+  description states that similar memories in the same scope are merged rather
+  than duplicated. `/brain remember` and the `remember()` API still return the
+  full record.
+- Memory value gate. `validateExtraction` rejects ephemeral task state on the
+  memories branch even at high model confidence (feedback is untouched):
+  bare URLs, git-ref-shaped strings, `file.ext:line` references, 结果/状态/
+  进度/输出/日志-colon status leads, status-emoji leads, status-ending
+  predicates (有问题/报错/失败了/修好了…, completed 了 forms included), and
+  test/build result snapshots ("181 个测试全部通过", verify/ci/build …
+  pass/passes/passing/fail/fails/failing/passed/failed/green/red). A
+  sentence that starts with 请记住/记住/remember, or contains a durable cue
+  (以后/今后/往后/一直/每次/总是/always/from now on), is exempt — explicit
+  user intent outranks the heuristics. Rejections count in `result.rejected`.
+- Model-path `updateOf`. Background extraction now injects the top-10
+  similar existing memories (same visible scope, id + key + text truncated to
+  200 code points, read-only `brain.search`) into the user message as
+  `EXISTING`, and `EXTRACTION_PROMPT` documents the minimum-signal bar, the
+  time-bound-statement rule and the updateOf protocol. The model may answer
+  with `"updateOf": "<id>"` on a memory that restates an existing one;
+  `validateExtraction` passes a non-empty id of at most 100 characters through,
+  and `learn()` resolves it inside the same transaction (same scope, same
+  workspace path) onto that record with the informative merge. A stale or
+  cross-scope id degrades to a plain add instead of failing the turn. A missing
+  or failing search degrades to an empty `EXISTING` list; extraction never
+  depends on store readability. `extractionPrompt()` in `lib/extraction.js`
+  carries the same value-gate wording.
+- Version 0.5.0, schemaVersion stays 1, no new persisted fields, no new
+  dependencies, and the `validateState` whitelist is unchanged. 23 new
+  regression tests cover the five merge criteria (including the
+  canonical-collision term guard), the 60% rule, the explicit-id exception,
+  updateOf (hit, stale, cross-scope), merge identity/capacity/
+  scope isolation, the EXISTING context, the gate's rejections (including
+  completed 了 suffixes and English word forms), exemptions and keep-samples,
+  and the untouched feedback/fallback paths.
+
 ## 0.4.1 — 2026-10-31
 
 - Fix intermittent Windows failures when concurrent writers contend for

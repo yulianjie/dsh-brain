@@ -161,12 +161,16 @@ test('model memory tools preserve global scope, paginate previews and read exact
   const call = async (name, args) => JSON.parse(await state.tools.get(name).execute(args, { agent: state.agent }));
   const saved = await call('brain_remember', { text: '我喜欢中文回答。' });
   assert.equal(saved.scope, 'global');
-  assert.deepEqual(Object.keys(saved).sort(), ['id', 'saved', 'scope']);
+  assert.equal(saved.merged, false);
+  assert.deepEqual(Object.keys(saved).sort(), ['id', 'merged', 'saved', 'scope']);
   const privateRecord = await call('brain_remember', { text: '本项目使用 Rust。' });
   assert.equal(privateRecord.scope, 'workspace');
   const globals = await call('brain_list', { scope: 'global' });
   assert.equal(globals.total, 1); assert.equal(globals.records[0].id, saved.id);
   assert.equal((await call('brain_read', { id: saved.id })).text, '我喜欢中文回答。');
+  const again = await call('brain_remember', { text: '我喜欢中文回答！' });
+  assert.equal(again.id, saved.id, 'a near-duplicate merges into the existing record');
+  assert.equal(again.merged, true);
   const text = 'Unicode 中文😀 '.repeat(110);
   const long = await call('brain_remember', { text, scope: 'global' });
   let cursor, reconstructed = '';

@@ -16,7 +16,8 @@ currently a 0.x project targeting a specific prerelease host API.
 ## What it does
 
 - Extracts durable information from completed root-agent user turns, with literal
-  source evidence, deduplication, bounded queues and conservative offline fallback.
+  source evidence, write-time merging of similar memories, a minimum-signal gate
+  that keeps transient task state out, bounded queues and conservative offline fallback.
 - Retrieves global preferences and facts for the current workspace using English
   tokens and Chinese bigrams. No vector database or separate memory server is needed.
 - Adjusts warmth, verbosity, humor, proactivity and formality gradually, with manual
@@ -36,7 +37,7 @@ currently a 0.x project targeting a specific prerelease host API.
 | Native UI and CLI help | Currently Chinese; commands and configuration keys are stable identifiers |
 
 Core CI coverage does not establish native Desktop support on Linux/macOS.
-Other host versions need separate verification. The package version is **0.4.1**.
+Other host versions need separate verification. The package version is **0.5.0**.
 
 ## Install
 
@@ -49,24 +50,24 @@ Use Desktop's bundled CLI, not an unrelated global DSH installation:
 
 ```powershell
 $dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
-& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.4.1'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.5.0'
 ```
 
 To install only the standalone management CLI, run
-`npm install -g @yulianjie/dsh-brain@0.4.1`, then `dsh-brain --help`.
+`npm install -g @yulianjie/dsh-brain@0.5.0`, then `dsh-brain --help`.
 This global CLI installation does not register the Desktop plugin.
 
 ### From GitHub Release
 
-Download `yulianjie-dsh-brain-0.4.1.tgz` and `SHA256SUMS.txt` from
-[v0.4.1](https://github.com/yulianjie/dsh-brain/releases/tag/v0.4.1) into one directory:
+Download `yulianjie-dsh-brain-0.5.0.tgz` and `SHA256SUMS.txt` from
+[v0.5.0](https://github.com/yulianjie/dsh-brain/releases/tag/v0.5.0) into one directory:
 
 ```powershell
 $expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
-$actual = (Get-FileHash .\yulianjie-dsh-brain-0.4.1.tgz -Algorithm SHA256).Hash
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.5.0.tgz -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'SHA256 mismatch' }
-tar -xf .\yulianjie-dsh-brain-0.4.1.tgz
-.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.1.tgz
+tar -xf .\yulianjie-dsh-brain-0.5.0.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz
 ```
 
 Installation still downloads dependencies; the tarball does not bundle `node_modules`.
@@ -82,7 +83,7 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.1.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz
 ```
 
 Restart Desktop normally. Open the installed `@yulianjie/dsh-brain` plugin and run
@@ -92,7 +93,7 @@ Use `-DshCli <path>` for another installation, `-Profile` for another profile,
 `-DshHome` for an isolated home, and `-DryRun` to inspect the intended operation.
 
 ```powershell
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.4.1.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
@@ -138,8 +139,11 @@ Say “Please remember: I prefer replies in English”, or use explicit commands
 
 Prefix each command with `/brain`. An omitted `remember` scope uses the current
 session workspace when available, otherwise global. Model tools are `brain_search`,
-`brain_list`, `brain_read`, `brain_remember`, `brain_forget` and `brain_personality`. Import/export
-and destructive style controls are reserved for user commands or the local CLI.
+`brain_list`, `brain_read`, `brain_remember`, `brain_forget` and `brain_personality`.
+Similar memories in the same scope — including model-tool writes — merge into the
+existing record instead of creating a duplicate; `brain_remember` reports that with
+`merged:true`. Import/export and destructive style controls are reserved for user
+commands or the local CLI.
 
 Automatic learning does not scan old conversations or import another agent's
 memory. It ignores assistant text, tool output and subagent turns. Workspace
@@ -225,7 +229,7 @@ its pid is confirmed gone; other cases still require manual cleanup.
 ## Management CLI
 
 Use the source CLI, or install the local tarball globally with
-`npm install -g ./yulianjie-dsh-brain-0.4.1.tgz` to obtain `dsh-brain`. Use a matching
+`npm install -g ./yulianjie-dsh-brain-0.5.0.tgz` to obtain `dsh-brain`. Use a matching
 `--data-dir` to manage the same store as Desktop. Except help, successful commands
 return JSON; errors go to stderr with a nonzero exit status.
 
