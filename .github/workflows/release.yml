@@ -76,7 +76,7 @@ jobs:
             *-*) dist_tag=next ;;
             *) dist_tag=latest ;;
           esac
-          npm publish "dist/yulianjie-dsh-brain-$VERSION.tgz" --access public --tag "$dist_tag"
+          npm publish "./dist/yulianjie-dsh-brain-$VERSION.tgz" --access public --tag "$dist_tag"
       - name: Verify the registry tarball matches the GitHub asset
         run: |
           mkdir -p registry
