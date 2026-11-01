@@ -338,7 +338,7 @@ test('context: 极小字符预算下不抛错、不超预算，风格段可整�
   await brain.remember({ text: '预算标记：项目使用 Rust。', scope: 'global' });
   for (const budget of [8000, 400, 200, 120, 60]) {
     await brain.configure({ maxContextChars: budget });
-    const context = brain.context({});
+    const context = brain.context({ query: '预算标记' });
     assert.equal(typeof context, 'string');
     assert.ok(context.length <= budget, `budget ${budget} exceeded: ${context.length}`);
     if (budget === 8000) {
@@ -367,10 +367,12 @@ test('context: 0/0.5/1 极值不注入数字、JSON 或维度名', async t => {
   for (const value of [0, 0.5, 1]) {
     await brain.setPersonality({ traits: Object.fromEntries(TRAITS.map(trait => [trait, value])) });
     const context = brain.context({});
+    // The fixed header quotes the "this chat" label; the checks cover what follows it.
+    const body = context.split('\n').slice(1).join('\n');
     assert.ok(context.includes(BRIEF_HEADER));
-    assert.doesNotMatch(context, /\d/);
-    assert.ok(!context.includes('"'));
-    assert.ok(!context.includes('warmth'));
+    assert.doesNotMatch(body, /\d/);
+    assert.ok(!body.includes('"'));
+    assert.ok(!body.includes('warmth'));
     assert.ok(context.length <= brain.maxContextChars);
   }
   await brain.configure({ personalityMode: 'off' });

@@ -314,7 +314,7 @@ test('Brain.dreamPlan groups durable memories and context injects the text brief
   assert.equal(plan.stats.truncated, false);
   assert.ok(plan.groups.every(group => group.reason === 'similarity' && group.ids.length === 2));
   assert.deepEqual(plan, brain.dreamPlan());
-  const context = brain.context({});
+  const context = brain.context({ query: '周会' });
   assert.ok(context.includes(BRIEF_HEADER));
   assert.ok(!context.includes('"traits"'));
   assert.ok(!context.includes('"mode"'));
@@ -322,7 +322,7 @@ test('Brain.dreamPlan groups durable memories and context injects the text brief
   assert.ok(!context.includes('Soft communication traits'));
   for (const value of [0, 0.5, 1]) {
     await brain.setPersonality({ traits: Object.fromEntries(TRAITS.map(trait => [trait, value])) });
-    const extreme = brain.context({});
+    const extreme = brain.context({ query: '周会' });
     assert.ok(extreme.length <= brain.maxContextChars, `context exceeds the character budget at ${value}`);
     assert.ok(extreme.includes(BRIEF_HEADER));
     assert.ok(extreme.includes('周会固定在每周五下午三点'), 'memory section must survive the style budget');

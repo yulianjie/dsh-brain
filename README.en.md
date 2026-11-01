@@ -157,6 +157,34 @@ preferences with `/brain remember global I prefer Chinese replies`. Automatic
 recall includes a small budgeted set of global preferences even for unrelated
 queries, followed by relevant global and current-workspace facts.
 
+Recall follows the current turn, with the previous two user messages of the
+session as context; the current turn's own messages are left out by message
+id, or by text containment when they have no id. Acknowledgements, option picks
+and generic follow-ups such as "continue", "ok", "thanks", 收到 or 方案 2 are
+ignored and add nothing new. Once 20 or more memories are eligible, a memory
+that matches only one word or one contiguous phrase of any length (a word
+repeated in the query counts once), such as 数据库 or 数据库连接, and no rare
+term is a weak match: at most three weak matches appear, counting ones already
+shown, and during a conversation they also need a word from the previous two
+turns. A rare term appears in at most max(2, min(3, 5% of memories)) memories,
+so in a store of 20 or more memories a single word usually brings at most three
+memories however large the store (a long phrase whose parts are each rare in
+different memories can bring a few more); a single-concept question in a large
+store brings the best three, and the model can call `brain_search` for the
+rest. A few words, such as 确认 or 酒吧, are stopwords
+or contain a particle and cannot trigger recall on their own. Memories already
+shown in a conversation stay until new strong matches push them out under the
+count or budget limit, so tool-call steps and contentless turns keep the same
+selection; unrelated global preferences still use at most about a third of the
+token budget. Subagents get no Brain reference, so they also miss global
+preferences such as the code-comment language: the parent agent has to pass
+them on, or the subagent can call `brain_search`. Each injected memory says
+`from` (`this chat`, `earlier chat`, `saved by user`, `saved by assistant` or
+`unknown`) and `saved` (the date it was last saved); anything not from this chat
+is presented as background that may be stale or unrelated. Only real user
+messages already on this session's surface are read, never tool output,
+assistant text, other sessions or subagents.
+
 `brain_list` and `brain_search` return `{records,total,nextCursor}` previews and
 accept `scope`, `limit` (1..20, default 10) and `cursor`. Use `brain_read({id,cursor?})`
 to read exact text in bounded chunks. Cursors expire when their visible results change and cannot be reused across

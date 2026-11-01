@@ -120,6 +120,16 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
     restoreStored(target.session); // Same strict persisted-log reader used on Desktop restart.
     assert.equal(target.session.eventAt(target.session.surface.nodes[0]).type, 'system/message');
   };
+  // A real child agent (created with a parent) is not a root and gets no Brain reference.
+  const probe = await handle.brain.remember({ text: 'CHILD_PROBE ORBIT manifests live in deploy/', scope: 'workspace', workspace: workspaceA });
+  const { agent: childAgent } = await ctx.agentLoop.createAgent(ctx, { sessionId: 'brain-synthetic-child', agentOptions: { provider: 'brain-synthetic', model: 'synthetic' }, parentAgent: agent, meta: { cwd: workspaceA } });
+  assert.ok(ctx.agents.roots().includes(agent) && !ctx.agents.roots().includes(childAgent), 'a child agent is not a root');
+  const extractionsBeforeChild = extractions, requestsBeforeChild = requests.length;
+  await turn(childAgent, 'Where do the CHILD_PROBE ORBIT manifests live?');
+  const childRequests = requests.slice(requestsBeforeChild).filter(r => r.purpose !== 'compaction');
+  assert.ok(childRequests.length > 0 && childRequests.every(r => !r.messages.some(m => m.source.kind === 'brain:long-term-reference')), 'child requests carry no Brain reference');
+  assert.equal(extractions, extractionsBeforeChild, 'child turns are not learned');
+  await handle.brain.forget({ id: probe.id, workspace: workspaceA });
   for (let i = 0; i < 3; i++) await turn(agent, 'Please keep replies concise.');
   assert.equal(extractions, 3);
   assert.equal((await handle.brain.personality()).traits.verbosity, 0.45);
@@ -135,16 +145,18 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const fresh = await make('brain-synthetic-new-session', workspaceA);
   const other = await make('brain-synthetic-other-project', workspaceB);
   const assembly = await ctx.systemPrompt.assemble(agents.assembleContextFor(fresh));
-  const context = { text: handle.contextFor(fresh) };
+  // Recall follows the conversation, so ask what a new session's first turn would ask.
+  const question = 'What are the ORBIT and NEBULA formats used in this project?';
+  const context = { text: handle.brain.context({ workspace: workspaceA, query: question, session: fresh.session.id }) };
   assert.ok(context.text.includes('ORBIT')); assert.ok(!assembly.contexts.some(item => item.name === 'brain:long-term-reference'));
   // The learned style reaches new sessions as the text brief; raw style wording stays out.
   assert.ok(context.text.includes(BRIEF_HEADER + styleBrief((await handle.brain.personality()).traits))); assert.ok(!context.text.includes('Please keep replies concise'));
   assert.ok(context.text.includes('NEBULA'), 'ordinary chat must be automatically learned');
-  assert.ok(!handle.contextFor(other).includes('ORBIT'));
+  assert.ok(!handle.brain.context({ workspace: workspaceB, query: question, session: other.session.id }).includes('ORBIT'));
   const execution = await ctx.tools.execute({ name: 'brain_search', arguments: { query: 'ORBIT' }, agent: fresh, callId: 'smoke-search', signal: new AbortController().signal });
   assert.equal(execution.isError, false); assert.ok(JSON.stringify(execution).includes('ORBIT'));
   const restarted = new Brain({ dataDir: join(directory, 'brain') }); await restarted.init();
-  assert.ok(restarted.context({ workspace: workspaceA }).includes('ORBIT'));
+  assert.ok(restarted.context({ workspace: workspaceA, query: question }).includes('ORBIT'));
   // Confirm model-facing native schema registration and actual new-session prompt.
   assert.equal(assembly.tools.filter(tool => tool.name.startsWith('brain_')).length, 6);
   await turn(fresh, 'What are the ORBIT and NEBULA formats used in this project?');
@@ -210,7 +222,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const disabled = requests.filter(r => r.purpose !== 'compaction').at(-1).messages.find(m => m.source.kind === 'brain:long-term-reference');
   assert.equal(disabled.content[0].text, 'Brain reference disabled.');
   await handle.brain.configure({ injectMemories: true, injectPersonality: true });
-  console.log(JSON.stringify({ contextAudit: true, longTurns: longMeasurements.length, maximumBrainSnapshots: Math.max(...longMeasurements.map(x => x.snapshots)), maximumBrainChars: Math.max(...longMeasurements.map(x => x.chars)), sessionReplay: true, strictStoredReplay: true, legacyMigration: true, unrelatedSectionsPreserved: true, globalAcrossWorkspaces: true, disableClearsOldContext: true, restoresAfterCompaction: true, hostTokenAccounting: true }));
+  console.log(JSON.stringify({ contextAudit: true, subagentNoReference: true, longTurns: longMeasurements.length, maximumBrainSnapshots: Math.max(...longMeasurements.map(x => x.snapshots)), maximumBrainChars: Math.max(...longMeasurements.map(x => x.chars)), sessionReplay: true, strictStoredReplay: true, legacyMigration: true, unrelatedSectionsPreserved: true, globalAcrossWorkspaces: true, disableClearsOldContext: true, restoresAfterCompaction: true, hostTokenAccounting: true }));
   await ctx.commands.execute(agent, '/brain freeze', [], new AbortController().signal);
   assert.equal((await handle.brain.personality()).frozen, true);
   const learnedBeforeRestart = await handle.brain.personality();

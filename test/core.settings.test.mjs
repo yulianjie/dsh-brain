@@ -43,16 +43,18 @@ test('runtime policy and manual overlay never overwrite learned or CLI state acr
 test('memory and personality injection switches operate independently and per-call overrides do not stick', async t => {
   const { brain } = await fixture(t);
   await brain.remember({ text: '记忆标记：工作时间使用中文。', scope: 'global' });
-  const personalityOnly = brain.context({ injectMemories: false });
+  // A global fact is injected only when the turn is about it.
+  const query = '记忆标记';
+  const personalityOnly = brain.context({ injectMemories: false, query });
   assert.ok(!personalityOnly.includes('记忆标记'));
   assert.ok(personalityOnly.includes(BRIEF_HEADER + styleBrief({})));
-  const memoryOnly = brain.context({ injectPersonality: false });
+  const memoryOnly = brain.context({ injectPersonality: false, query });
   assert.ok(memoryOnly.includes('记忆标记'));
   assert.ok(!memoryOnly.includes(BRIEF_HEADER));
   assert.ok(!brain.context({ personalityMode: 'off' }).includes(BRIEF_HEADER));
   assert.equal(brain.context({ injectMemories: false, injectPersonality: false }), '');
   assert.equal(brain.context({ injectMemories: false, personalityMode: 'off' }), '');
-  assert.ok(brain.context({}).includes('记忆标记'));
+  assert.ok(brain.context({ query }).includes('记忆标记'));
   assert.ok(brain.context({}).includes(BRIEF_HEADER));
   assert.ok(!brain.context({}).includes('"traits"'));
 });
@@ -89,7 +91,7 @@ test('live limit changes validate atomically, retain existing records, and count
   const { brain } = await fixture(t, { maxContextMemories: 1 });
   await brain.remember({ text: '可注入事实：项目使用 Rust。', scope: 'global' });
   await feedback(brain, 1);
-  assert.ok(brain.context({}).includes('可注入事实'));
+  assert.ok(brain.context({ query: 'Rust' }).includes('可注入事实'));
   const existing = await brain.list();
   await brain.configure({ maxMemories: 1 });
   assert.deepEqual(await brain.list(), existing);

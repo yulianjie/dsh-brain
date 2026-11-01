@@ -1,5 +1,110 @@
 # Changelog
 
+## Unreleased
+
+- Subagents no longer receive a Brain reference. `contextFor()` returns `''`
+  for non-root agents, and `agent/pre-step` and `agent/request` return their
+  decision or request unchanged. Their query used to be empty, so they got the
+  newest `maxContextMemories` memories whatever the topic. If an older version
+  left a Brain reference on a subagent's session, its next request replaces
+  that node once with `Brain reference disabled.`; errors there are swallowed,
+  so a subagent request never fails because of Brain. A failing
+  `ctx.agents.roots()` lookup leaves the session untouched: no injection and
+  no retirement of a reference, while the request itself proceeds; a user
+  message claimed, or a turn ended, while the lookup fails is not learned.
+  Only a lookup that succeeds and excludes the agent takes the non-root path.
+- Automatic injection selects memories by relevance instead of raw term
+  counts. The new pure module `lib/relevance.js` scores eligible visible
+  memories with BM25 over binary term frequency (`K1 = 1.2`, `B = 0.75`) on the
+  shared `lib/text.js` terms. The index and queries both ignore a fixed
+  stopword list (Chinese filler and connective bigrams; acknowledgements such
+  as 收到, 谢谢, 没问题; option picks such as 方案, 第二, 下一步; generic
+  question words such as 有没有 and 要不要; English function words and
+  acknowledgements such as thanks, ok, next, done, lgtm), every Han term that
+  contains one of 的了吗吧呢啊嗯哦, and ASCII numbers of one or two digits
+  (option picks such as `2` or `方案 2`). Only terms of the current turn make
+  a memory a candidate.
+- Strong and weak evidence. A candidate is strong when the store holds fewer
+  than 20 eligible memories (`SMALL_STORE`), when it has at least two
+  independent matches with the current turn, or when it matches a term that
+  appears in at most `max(2, min(3, 5% of memories))` memories
+  (`SPECIFIC_RATIO = 0.05`, capped at `WEAK_MAX`). Independent matches count
+  each distinct matched ASCII word or lone Han character once and each maximal
+  stretch of adjacent matched bigrams once, and a stretch counts only when it
+  adds a term not counted yet: the overlapping bigrams of one word (数据/据库)
+  are a single match, and a word repeated in the query counts once. One word or
+  phrase, however long, is therefore weak unless it contains a specific term or
+  the store is small, and once 20 or more memories are eligible a single word
+  usually brings at most three memories however large the store: up to three
+  specific ones or up to three weak ones. A long phrase whose bigrams are each
+  rare in different memories can still bring a few more. The trade-off is
+  that in a large store a single-concept question brings the three best of
+  possibly more matches; on a 500-memory synthetic corpus single-phrase recall
+  fell from 100% to 76% while precision stayed at 100%, and the model can call
+  `brain_search` for the rest. Candidates whose current-turn score is below 35%
+  of the best current-turn score are dropped (`REL_FLOOR = 0.35`); history
+  never moves that bar. At most three weak matches appear (`WEAK_MAX = 3`),
+  counting weak matches already shown, so repeated tool steps cannot pile them
+  up.
+- Conversation window and sticky selection. The query is the current turn's
+  real user text. The previous two real user messages on the session surface
+  (scanning the last six, each cut to 2000 code points) are history. Messages
+  of the current turn are left out by the message ids recorded when the inbox
+  claims them, with text containment as the fallback for messages without an
+  id, so a current message longer than `extractionMaxChars` never takes a
+  history slot. History terms add half their score to the order
+  (`HISTORY_WEIGHT = 0.5`) and never add a memory on their own; once the
+  previous turns contribute terms, a weak candidate needs at least one of
+  them. Memories listed in the session's current Brain reference stay while
+  they remain visible and eligible, ranked after new strong matches, until the
+  count or budget limit pushes them out. Repeated tool steps and contentless
+  turns therefore keep the same selection, and a turn with new strong matches
+  puts those first. `lib/context.js` adds the read-only helpers
+  `recentUserTexts()`, `referenceIds()` and `hasReference()`, which never
+  throw.
+- Core global `preference`/`instruction` records keep their share: their ids
+  are removed from the kept ids before selection, so a core preference shown
+  earlier stays inside the 1/3 core token sub-budget instead of returning as a
+  kept memory. The style brief and all budget logic are unchanged.
+- Provenance. Each injected line is now
+  `{"id","scope","from","saved","text"}` (plus `truncated` when cut). `saved`
+  is the `updatedAt` date. `from` is `this chat` for memories learned in the
+  current session, `earlier chat` for other sessions, `saved by user` for
+  `/brain remember`, CLI and API writes, `saved by assistant` for
+  `brain_remember`, and `unknown` otherwise. `learn()` and the label share one
+  session-id helper, so credential-like session ids that `learn()` hashes still
+  match. The header now says that an item whose `from` is not `this chat` is
+  background that may be stale or unrelated to the current task.
+  `lastContextUsage`, shown by `/brain status`, adds `ids`: the injected memory
+  ids in output order.
+- `brain_search`, `brain_list`, `brain_read`, `/brain search`, `search()`,
+  `memoryPage()`, `_rank()`, learning, write-time deduplication, dream and the
+  CLI are unchanged.
+- The relevance index is memoized per Brain instance, one entry per resolved
+  workspace and at most four (the least recently used goes first),
+  fingerprinted by the id, `updatedAt`, text length and key of every visible
+  eligible memory; a write from the CLI or another instance rebuilds it on the
+  next request. With `maxContextMemories` at 0 no index is built.
+  schemaVersion stays 1, with no new persisted fields, settings or
+  dependencies.
+- Known limits: subagents no longer see global preferences such as the
+  code-comment language, so the parent agent has to pass them on or the
+  subagent can call `brain_search`; a restated fact keeps the provenance of
+  whichever text won the write-time merge; over a long conversation the
+  reference can fill up to `maxContextMemories` with memories that were
+  relevant earlier in that conversation; bigram tokenization can still produce
+  a rare junk match across a word boundary; a few real words cannot match on
+  their own because they are stopwords or contain a particle (for example
+  确认, 酒吧); the relevance index is rebuilt on the first request after a
+  write that changes a visible memory, so that request pays a build cost that
+  grows with store size.
+- Tests: new `test/relevance.test.mjs` (the policy on synthetic stores of 32,
+  100 and 500 memories) and `test/isolation.test.mjs` (Brain and adapter level,
+  through the hooks). Existing tests that relied on empty-query recall now pass a matching
+  query or save a real preference as `kind: 'preference'`, and the digit,
+  quote and trait-name checks in `test/dream.adversarial.test.mjs` cover the
+  text after the header, which quotes `"this chat"`.
+
 ## 0.5.0 — 2026-10-31
 
 - Write-time deduplication merging. `_remember` now matches a candidate against

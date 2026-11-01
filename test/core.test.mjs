@@ -85,22 +85,22 @@ test('language and manual style memories inject; automatic style evidence remain
   await learn(brain, 1, '请记住：我喜欢中文回答。');
   assert.ok(brain.context({}).includes('我喜欢中文回答'));
   await learn(brain, 2, '以后回答请简短一点。', { extraction: { memories: [], feedback: [] } });
-  assert.ok(!brain.context({}).includes('以后回答请简短一点'));
+  assert.ok(!brain.context({ query: '回答简短' }).includes('以后回答请简短一点'));
   assert.equal((await brain.personality()).traits.verbosity, 0.5);
-  await brain.remember({ text: '人工设置：回答多用类比。', scope: 'global' });
+  await brain.remember({ text: '人工设置：回答多用类比。', scope: 'global', kind: 'preference' });
   assert.ok(brain.context({}).includes('回答多用类比'));
 });
 
 test('context respects exact character budget and notices concurrent updates', async t => {
   const { brain, dataDir } = await fixture(t, { maxContextChars: 1000 });
   const other = await new Brain({ dataDir }).init();
-  await other.remember({ text: '新的跨实例偏好是使用中文。', scope: 'global' });
+  await other.remember({ text: '新的跨实例偏好是使用中文。', scope: 'global', kind: 'preference' });
   assert.ok(brain.context({}).includes('新的跨实例偏好'));
   await other.setPersonality({ traits: { verbosity: 0.25 } });
   assert.ok(brain.context({}).includes(BRIEF_HEADER + styleBrief({ verbosity: 0.25 })));
   assert.ok(!brain.context({}).includes('0.25'));
   for (let i = 0; i < 10; i++) await other.remember({ text: `${i} ${'内容'.repeat(200)}`, scope: 'global' });
-  assert.ok(brain.context({}).length <= 1000);
+  assert.ok(brain.context({ query: '内容' }).length <= 1000);
   assert.equal(new Brain({ dataDir, maxContextChars: 20 }).context({}), '');
 });
 

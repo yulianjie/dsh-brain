@@ -174,13 +174,20 @@ test('预算：窄预算下记忆优先于风格段，绝不出现"只有风格�
   t.after(() => rm(dataDir, { recursive: true, force: true }));
   const seed = await new Brain({ dataDir }).init();
   await seed.remember({ text: '用户要求称呼为船长', scope: 'global', kind: 'preference' });
-  for (const budget of [246, 300, 329, 500]) {
+  // 预算从真实的 header、风格段与记忆行推导，不依赖它们的具体长度。
+  const [header, style, memory] = seed.context({}).split('\n');
+  assert.ok(style.startsWith(BRIEF_HEADER) && memory.includes('称呼为船长'));
+  const withMemory = header.length + 1 + memory.length, withBoth = withMemory + 1 + style.length;
+  const styleOnly = header.length + 1 + style.length;
+  for (const budget of [styleOnly, withMemory, withBoth - 1, withBoth, withBoth + 200]) {
     const brain = await new Brain({ dataDir, maxContextChars: budget, maxContextTokens: 4096 }).init();
     const text = brain.context({});
     assert.ok(text.length <= budget, `预算 ${budget} 被超出：${text.length}`);
-    if (budget >= 284) assert.ok(text.includes('称呼为船长'), `预算 ${budget} 丢失了能装下的记忆`);
+    if (budget >= withMemory) assert.ok(text.includes('称呼为船长'), `预算 ${budget} 丢失了能装下的记忆`);
+    if (budget >= withMemory && budget < withBoth) assert.ok(!text.includes(BRIEF_HEADER), `预算 ${budget} 应让出风格段`);
   }
-  // 300 是典型的临界值：HEAD 上能装下记忆，风格段必须让位。
-  const tight = await new Brain({ dataDir, maxContextChars: 300, maxContextTokens: 4096 }).init();
+  // 能装下 header + 记忆、装不下 header + 风格段 + 记忆的最紧预算：记忆保留，风格段让位。
+  const tight = await new Brain({ dataDir, maxContextChars: withMemory, maxContextTokens: 4096 }).init();
   assert.ok(tight.context({}).includes('称呼为船长'));
+  assert.ok(!tight.context({}).includes(BRIEF_HEADER));
 });
