@@ -44,21 +44,16 @@ provider adapter; it was not an online LLM quality evaluation. Core CI coverage
 does not establish native Desktop support on Linux/macOS. See the
 [0.6.0 verification record](docs/releases/v0.6.0.md).
 
-### Remote release verification (status at this source snapshot)
+### Remote release verification
 
-When this source snapshot was prepared, local source, package-install and Desktop
-runtime checks were complete; final-tag GitHub CI, GitHub Release assets, npm
-publication and registry tarball verification were pending the release workflow.
-The [0.6.0 verification record](docs/releases/v0.6.0.md) and GitHub Actions have
-the final status. The installation commands below target 0.6.0 and can be used
-after the release workflow publishes the package.
+Version 0.6.0 is published on [GitHub Releases](https://github.com/yulianjie/dsh-brain/releases/tag/v0.6.0) and [npm](https://www.npmjs.com/package/@yulianjie/dsh-brain/v/0.6.0). All six cross-platform CI jobs and the release workflow passed. Independently downloaded GitHub and npm tarballs have identical SHA-256 hashes. See the [0.6.0 verification record](docs/releases/v0.6.0.md) for scope and checksums.
 
 ## Install
 
 The official package name is **`@yulianjie/dsh-brain`**. The unscoped npm name
 `dsh-brain` belongs to another project. The management command remains `dsh-brain`.
 
-### From npm (after publication)
+### From npm
 
 Use Desktop's bundled CLI, not an unrelated global DSH installation:
 
@@ -71,7 +66,7 @@ To install only the standalone management CLI, run
 `npm install -g @yulianjie/dsh-brain@0.6.0`, then `dsh-brain --help`.
 This global CLI installation does not register the Desktop plugin.
 
-### From GitHub Release (after publication)
+### From GitHub Release
 
 Download `yulianjie-dsh-brain-0.6.0.tgz` and `SHA256SUMS.txt` from
 [v0.6.0](https://github.com/yulianjie/dsh-brain/releases/tag/v0.6.0) into one directory:

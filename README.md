@@ -34,15 +34,15 @@
 | 安装/卸载脚本 | Windows PowerShell，使用 Desktop 自带 CLI |
 | 设置界面与 CLI 帮助 | 当前为中文；提供英文入门文档 |
 
-### 远端发布验证（此源码快照）
+### 远端发布验证
 
-准备此源码快照时，本地源码、包安装和 Desktop runtime 验证已完成；最终 tag 的 GitHub CI、GitHub Release 资产、npm 发布及 registry tarball 校验尚待 release workflow 运行。最终结果以 [0.6.0 验证记录](docs/releases/v0.6.0.md)和 GitHub Actions 为准。下方安装命令须在 v0.6.0 发布后使用。
+v0.6.0 已发布到 [GitHub Releases](https://github.com/yulianjie/dsh-brain/releases/tag/v0.6.0) 和 [npm](https://www.npmjs.com/package/@yulianjie/dsh-brain/v/0.6.0)。发布候选的六组跨平台 CI 与发布工作流均已通过；GitHub 和 npm 下载包的 SHA-256 一致。完整范围与校验值见 [0.6.0 验证记录](docs/releases/v0.6.0.md)。
 
 ## 安装与卸载
 
-正式包名为 **`@yulianjie/dsh-brain`**。npm 上不带 scope 的 `dsh-brain` 属于其他项目，请勿混用。Node.js CLI 最低版本为 `22.13`。下方 npm 和 Release 命令针对 0.6.0；远端发布状态见上方的待验证项。
+正式包名为 **`@yulianjie/dsh-brain`**。npm 上不带 scope 的 `dsh-brain` 属于其他项目，请勿混用。Node.js CLI 最低版本为 `22.13`。下方 npm 和 Release 命令针对 0.6.0；发布状态与校验结果见上方验证记录。
 
-### 从 npm 安装（发布完成后）
+### 从 npm 安装
 
 在 PowerShell 中调用 Desktop 自带 CLI；不要使用全局 npm 安装的其他版本 DSH：
 
@@ -53,7 +53,7 @@ $dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runti
 
 只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.6.0`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
 
-### 从 GitHub Release 安装（发布完成后）
+### 从 GitHub Release 安装
 
 从 [v0.6.0 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.6.0) 下载 `yulianjie-dsh-brain-0.6.0.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
 

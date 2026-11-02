@@ -14,7 +14,9 @@ Publish the same tarball to GitHub and npm; do not rebuild independently afterwa
 to a draft GitHub release, publishes that exact tarball to npm, then re-downloads
 both the GitHub release asset and the registry tarball to confirm the checksums
 match. It publishes the GitHub draft only after verification succeeds, retrying
-while the registry makes a fresh version visible. Prerelease versions (containing `-`)
+while the registry makes a fresh version visible. Version lookups and registry
+tarball downloads use `--prefer-online` so pre-publication cache entries do not
+mask a newly published version. Prerelease versions (containing `-`)
 publish under the `next` dist-tag so `latest` is untouched. A version already
 on npm is only verified, never rebuilt or replaced, so re-running a release
 workflow is safe.

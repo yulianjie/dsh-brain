@@ -55,7 +55,7 @@ jobs:
           # Fail before creating public release assets if publishing credentials
           # expired. The token itself is only supplied through the secret env.
           npm whoami --registry=https://registry.npmjs.org/ >/dev/null
-          if npm view "@yulianjie/dsh-brain@$VERSION" dist.integrity >/dev/null 2>&1; then
+          if npm view "@yulianjie/dsh-brain@$VERSION" dist.integrity --prefer-online >/dev/null 2>&1; then
             echo "ALREADY_PUBLISHED=1" >> "$GITHUB_ENV"
           else
             echo "ALREADY_PUBLISHED=0" >> "$GITHUB_ENV"
@@ -95,7 +95,7 @@ jobs:
           mkdir -p check/asset check/registry
           gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "yulianjie-dsh-brain-$VERSION.tgz" --dir check/asset
           for attempt in 1 2 3 4 5 6 7 8 9; do
-            if npm pack "@yulianjie/dsh-brain@$VERSION" --pack-destination check/registry >/dev/null 2>&1; then
+            if npm pack "@yulianjie/dsh-brain@$VERSION" --pack-destination check/registry --prefer-online >/dev/null 2>&1; then
               break
             fi
             if [ "$attempt" = 9 ]; then

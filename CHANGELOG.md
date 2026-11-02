@@ -2,6 +2,13 @@
 
 ## 0.6.0
 
+- Reject model summaries that reverse supported operation order, comparison
+  direction or entity-to-value assignments. Reject one-off state and contradictory
+  style feedback rather than persisting it as a lasting preference.
+- Preserve unrelated records when a model proposes the wrong `updateOf`/id or
+  colliding key. Busy model-facing reads fail closed instead of serving an old
+  cached memory after another instance has forgotten it.
+
 - Replace the persistent JSON file with SQL tables and transactions in
   `<dataDir>/brain.sqlite`, using Node's built-in `node:sqlite` (Node.js >=22.13).
   No npm SQLite/native dependency was added. On first startup, an existing
