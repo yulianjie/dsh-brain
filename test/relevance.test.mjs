@@ -51,8 +51,36 @@ test('incumbents stay through a contentless turn and history corroborates weak m
   assert.deepEqual(select('测试要跟着改吗', ['登录接口老是超时，帮我看看', '看下 auth.yaml 里的超时配置']), ['login-3']);
 });
 
-test('a topic switch puts new strong matches ahead of the retained incumbents', () => {
-  assert.deepEqual(select('现在看看数据库连接池满了的问题', ['登录接口老是超时', '看下 auth.yaml'], LOGIN), ['db-1', 'db-5', ...LOGIN]);
+test('a topic switch replaces unrelated incumbents with strong current matches', () => {
+  assert.deepEqual(select('现在看看数据库连接池满了的问题', ['登录接口老是超时', '看下 auth.yaml'], LOGIN), ['db-1', 'db-5']);
+});
+
+test('contentful turns keep topical incumbents and settle across repeated tool steps', () => {
+  const query = '超时阈值 auth.yaml 怎么配';
+  let keep = select(query);
+  assert.deepEqual(keep, ['login-1']);
+  for (let step = 0; step < 4; step++) {
+    keep = select(query, ['登录接口老是超时'], keep);
+    assert.deepEqual(keep, ['login-1'], `step ${step + 1}`);
+  }
+});
+
+test('recent same-topic evidence can bridge a weak contentful continuation', () => {
+  const store = buildRelevanceIndex([
+    { id: 'old-topic', text: 'bridge login fact', updatedAt: AT },
+    { id: 'current-topic', text: 'bridge test fact', updatedAt: AT },
+    ...Array.from({ length: 4 }, (_, i) => ({ id: `test-${i}`, text: `test filler${i}`, updatedAt: AT })),
+    ...Array.from({ length: 20 }, (_, i) => ({ id: `filler-${i}`, text: `other${i} note${i}`, updatedAt: AT })),
+    { id: 'unlinked-history', text: 'login archive fact', updatedAt: AT },
+  ]);
+  const selected = ids(selectRelevant(store, { query: 'test', history: ['bridge login'], keep: ['old-topic', 'unlinked-history'] }));
+  assert.ok(selected.includes('old-topic'), JSON.stringify(selected));
+  assert.ok(selected.includes('current-topic'));
+  assert.ok(!selected.includes('unlinked-history'));
+});
+
+test('a meaningful turn with no indexed match drops stale incumbents', () => {
+  assert.deepEqual(select('NEBULA 新话题', ['登录接口老是超时'], LOGIN), []);
 });
 
 test('unknown incumbent ids are ignored', () => {
@@ -125,10 +153,9 @@ test('generic single terms never yield more than three matches', () => {
   const generic = [...index.postings].filter(([term, posting]) => posting.length > Math.max(2, SPECIFIC_RATIO * index.N) && terms(term).length === 1 && terms(term)[0] === term).map(([term]) => term);
   assert.ok(generic.length >= 5);
   for (const query of generic) assert.ok(select(query).length <= WEAK_MAX, query);
-  // Incumbents that do not match the turn are not weak and leave the weak slots free.
+  // Unrelated incumbents are dropped; the weak slots go to current matches.
   const result = select('测试', [], ['release-1', 'release-2']);
-  assert.deepEqual(result.slice(0, 2), ['release-1', 'release-2']);
-  assert.equal(result.length, 2 + WEAK_MAX);
+  assert.deepEqual(result, ['ci-2', 'memory-4', 'settings-4']);
 });
 
 test('a word repeated in the query is still one match', () => {

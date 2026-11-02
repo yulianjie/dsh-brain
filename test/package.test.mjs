@@ -6,6 +6,12 @@ test('package exposes its plugin bundle and standalone management CLI', async ()
   const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(manifest.type, 'module');
   assert.equal(manifest.name, '@yulianjie/dsh-brain');
+  assert.equal(manifest.version, '0.6.0');
+  assert.equal(manifest.engines.node, '>=22.13');
+  assert.doesNotMatch(JSON.stringify(manifest.dependencies), /sqlite|better-sqlite3/i);
+  const lock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'));
+  assert.equal(lock.version, manifest.version);
+  assert.doesNotMatch(Object.keys(lock.packages).join('\n'), /sqlite|better-sqlite3/i);
   assert.equal(manifest.publishConfig.access, 'public');
   assert.equal(manifest.publishConfig.registry, 'https://registry.npmjs.org/');
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml');

@@ -108,7 +108,7 @@ test('integration learns only real user text from completed live root turns', as
   assert.equal(state.calls(), 0);
   event(state.agent.session, { type: 'turn/end', seq: 3, data: { turn: 1, reason: { kind: 'completed' } } });
   event(state.agent.session, { type: 'turn/end', seq: 3, data: { turn: 1, reason: { kind: 'completed' } } });
-  await state.learner.flush(); assert.equal(state.calls(), 1); assert.equal((await state.brain.stats()).processedTurns, 1);
+  await state.learner.flush(); assert.equal(state.calls(), 1); assert.equal((await state.brain.stats()).processedTurns, 0, 'empty extraction does not grow the replay ledger');
 });
 
 test('autoLearn disabled preserves query-aware prompt recall without invoking model', async t => {
@@ -154,6 +154,48 @@ test('native command and tool definitions use current runtime contract', async t
   assert.ok(output.includes('ORBIT')); assert.deepEqual(state.tools.get('brain_search').output.render({}, output), [{ type: 'text', text: output }]);
   const error = await command.handler({ agent: state.agent, rawInput: 'personality verbosity=oops' }); assert.equal(error.kind, 'error');
   assert.equal(await apply(state.ctx, { dataDir: join(state.dataDir, 'second') }), undefined);
+});
+
+test('subagents may inspect Brain but cannot mutate memories or run Brain commands', async t => {
+  const state = await setup(t);
+  const command = state.commands.get('brain');
+  const rootRecord = await state.brain.remember({ text: 'SYNTH_ROOT_ONLY_MEMORY', scope: 'global' });
+  const before = await state.brain.exportData();
+
+  const search = await state.tools.get('brain_search').execute({ query: 'SYNTH_ROOT_ONLY_MEMORY' }, { agent: state.child });
+  const list = await state.tools.get('brain_list').execute({}, { agent: state.child });
+  const read = await state.tools.get('brain_read').execute({ id: rootRecord.id }, { agent: state.child });
+  const personality = await state.tools.get('brain_personality').execute({}, { agent: state.child });
+  assert.ok(search.includes('SYNTH_ROOT_ONLY_MEMORY'));
+  assert.ok(list.includes('SYNTH_ROOT_ONLY_MEMORY'));
+  assert.ok(read.includes('SYNTH_ROOT_ONLY_MEMORY'));
+  assert.ok(personality.includes('traits'));
+
+  await assert.rejects(state.tools.get('brain_remember').execute({ text: 'SYNTH_CHILD_WRITE', scope: 'global' }, { agent: state.child }), /root agent/);
+  await assert.rejects(state.tools.get('brain_forget').execute({ id: rootRecord.id }, { agent: state.child }), /root agent/);
+  const commandResult = await command.handler({ agent: state.child, rawInput: 'remember global SYNTH_CHILD_COMMAND_WRITE' });
+  assert.equal(commandResult.kind, 'error');
+  assert.match(commandResult.text, /root agent/);
+  assert.deepEqual(await state.brain.exportData(), before, 'child attempts must leave the complete durable state unchanged');
+
+  const roots = state.ctx.agents.roots;
+  state.ctx.agents.roots = () => { throw new Error('root lookup unavailable'); };
+  await assert.rejects(state.tools.get('brain_remember').execute({ text: 'SYNTH_UNKNOWN_ROOT_WRITE', scope: 'global' }, { agent: state.agent }), /root agent/);
+  const unknownRootCommand = await command.handler({ agent: state.agent, rawInput: 'remember global SYNTH_UNKNOWN_ROOT_COMMAND_WRITE' });
+  assert.equal(unknownRootCommand.kind, 'error');
+  assert.deepEqual(await state.brain.exportData(), before, 'unknown root status must fail closed');
+  state.ctx.agents.roots = roots;
+
+  const rootCommand = await command.handler({ agent: state.agent, rawInput: 'remember global SYNTH_ROOT_COMMAND_WRITE' });
+  assert.equal(rootCommand.kind, 'success');
+  const rootWrite = JSON.parse(await state.tools.get('brain_remember').execute({ text: 'SYNTH_ROOT_TOOL_WRITE', scope: 'global' }, { agent: state.agent }));
+  assert.equal(rootWrite.saved, true);
+  const forgotten = JSON.parse(await state.tools.get('brain_forget').execute({ id: rootRecord.id }, { agent: state.agent }));
+  assert.equal(forgotten.forgotten, true);
+  const remaining = await state.brain.list();
+  assert.ok(remaining.some(record => record.text === 'SYNTH_ROOT_COMMAND_WRITE'));
+  assert.ok(remaining.some(record => record.id === rootWrite.id));
+  assert.ok(!remaining.some(record => record.id === rootRecord.id));
 });
 
 test('model memory tools preserve global scope, paginate previews and read exact text', async t => {

@@ -95,7 +95,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
         extractions++;
         const user = JSON.parse(options.messages[1].content[0].text).USER;
         const style = user.includes('concise');
-        text = JSON.stringify({ memories: [{ text: user, evidence: user, kind: style ? 'preference' : 'fact', scope: style ? 'global' : 'workspace', confidence: 0.95, key: style ? 'style:verbosity' : 'project-format' }], feedback: style ? [{ trait: 'verbosity', value: 0.1, evidence: user, confidence: 0.95 }] : [] });
+        text = JSON.stringify({ memories: [{ text: style ? 'User prefers concise replies.' : user.replace('This project stores its build manifests in the ', 'Project build manifests use the '), evidence: user, kind: style ? 'preference' : 'fact', scope: style ? 'global' : 'workspace', confidence: 0.95, key: style ? 'style:verbosity' : 'project-format' }], feedback: style ? [{ trait: 'verbosity', value: 0.1, evidence: user, confidence: 0.95 }] : [] });
       }
       yield { type: 'block-start', index: 0, blockType: 'text' };
       yield { type: 'text-delta', index: 0, text };
@@ -145,6 +145,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   const fresh = await make('brain-synthetic-new-session', workspaceA);
   const other = await make('brain-synthetic-other-project', workspaceB);
   const assembly = await ctx.systemPrompt.assemble(agents.assembleContextFor(fresh));
+  assert.ok(assembly.sections.some(section => section.name === 'brain:reference-policy'), 'memory trust policy is a system section');
   // Recall follows the conversation, so ask what a new session's first turn would ask.
   const question = 'What are the ORBIT and NEBULA formats used in this project?';
   const context = { text: handle.brain.context({ workspace: workspaceA, query: question, session: fresh.session.id }) };
@@ -267,7 +268,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   assert.equal(Object.keys(formSchema.dict).length, 23);
   assert.ok(!('dataDir' in formSchema.dict));
   const entry = [...host.loader.entries()].find(item => item.options.id === 'brain');
-  const originalUid = entry.fiber.uid, storedBefore = readFileSync(join(directory, 'brain/brain.json'), 'utf8');
+  const originalUid = entry.fiber.uid, storedBefore = readFileSync(join(directory, 'brain/brain.sqlite'), 'utf8');
   await host.settings.mutate('brain', [{ op: 'set', path: ['autoLearn'], value: false }, { op: 'set', path: ['injectMemories'], value: false }, { op: 'set', path: ['personalityMode'], value: 'manual' }, { op: 'set', path: ['manualVerbosity'], value: 0.2 }], descriptor().revision);
   assert.equal(entry.fiber.uid, originalUid, 'volatile settings must preserve the live plugin fiber');
   host.llm.registerAdapter(['brain-synthetic'], new Synthetic());
@@ -275,7 +276,7 @@ console.log(JSON.stringify({source,packages:done.size,files,cordis:JSON.parse(fs
   await turn(uiAgent, 'Show configured style.', host);
   const updatedContext = requests.filter(r => r.purpose !== 'compaction').at(-1).messages.find(m => m.source.kind === 'brain:long-term-reference').content[0].text;
   assert.ok(!updatedContext.includes('ORBIT')); assert.ok(updatedContext.includes(BRIEF_HEADER + styleBrief({ verbosity: 0.2 }))); assert.ok(!updatedContext.includes('"traits"'));
-  assert.equal(readFileSync(join(directory, 'brain/brain.json'), 'utf8'), storedBefore, 'settings edits must not overwrite learned/frozen personality');
+  assert.equal(readFileSync(join(directory, 'brain/brain.sqlite'), 'utf8'), storedBefore, 'settings edits must not overwrite learned/frozen personality');
   const patchBeforeInvalid = readFileSync(patchPath, 'utf8');
   await assert.rejects(host.settings.mutate('brain', [{ op: 'set', path: ['extractionProvider'], value: 'partial-route' }], descriptor().revision), /同时/);
   assert.equal(readFileSync(patchPath, 'utf8'), patchBeforeInvalid, 'invalid pair must be rejected before persistence');

@@ -52,6 +52,9 @@ jobs:
             echo "::error::Secret NPM_AUTOMATION_TOKEN is not configured (Settings > Secrets and variables > Actions)."
             exit 1
           fi
+          # Fail before creating public release assets if publishing credentials
+          # expired. The token itself is only supplied through the secret env.
+          npm whoami --registry=https://registry.npmjs.org/ >/dev/null
           if npm view "@yulianjie/dsh-brain@$VERSION" dist.integrity >/dev/null 2>&1; then
             echo "ALREADY_PUBLISHED=1" >> "$GITHUB_ENV"
           else
@@ -73,7 +76,7 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --draft
           fi
       - name: Publish the same tarball to npm
         if: env.ALREADY_PUBLISHED == '0'
@@ -110,3 +113,11 @@ jobs:
             echo "::error::The npm registry tarball differs from the tarball attached to the GitHub release."
             exit 1
           fi
+      - name: Publish the verified GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$VERSION" in
+            *-*) gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease ;;
+            *) gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest ;;
+          esac

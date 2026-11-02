@@ -28,7 +28,7 @@ test('a current-statement opt-out overrides model-selected memory evidence', asy
   await brain.learn({ sessionId: 'review-opt-out', turnId: '1', userText: '不要记住这件事：我喜欢乌龙茶', extraction: { memories: [{ text: '我喜欢乌龙茶', evidence: '我喜欢乌龙茶', kind: 'preference', scope: 'global', confidence: 1 }] } });
   assert.equal((await brain.list()).length, 0);
   // This is a statement-scoped opt-out, not a permanent learning mode.
-  await brain.learn({ sessionId: 'review-opt-out', turnId: '2', userText: '请记住我喜欢红茶。' });
+  await brain.learn({ sessionId: 'review-opt-out', turnId: '2', userText: '请记住我喜欢红茶。', extraction: { memories: [{ text: '用户喜欢红茶。', evidence: '请记住我喜欢红茶。', scope: 'global', kind: 'preference', confidence: .9 }], feedback: [] } });
   assert.equal((await brain.list()).length, 1);
 });
 

@@ -18,15 +18,21 @@ const directory = await mkdtemp(join(tmpdir(), 'dsh-brain-package-'));
 try {
   const [pack] = JSON.parse(run(process.execPath, [npm, 'pack', '--json', '--ignore-scripts', '--pack-destination', directory]));
   const names = pack.files.map(file => file.path);
+  assert.ok(!names.includes('docs/MEMORY-ISOLATION-REVIEW.zh-CN.md'),
+    'Local review draft must not be included in the npm tarball.');
   const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  assert.equal(manifest.version, '0.6.0');
+  assert.equal(manifest.engines.node, '>=22.13');
+  assert.doesNotMatch(JSON.stringify(manifest.dependencies), /sqlite|better-sqlite3/i,
+    'SQLite uses the built-in node:sqlite module; no npm SQLite dependency should be packaged.');
   const required = ['package.json', 'LICENSE', 'NOTICE', 'README.md', 'README.en.md',
-    'lib/index.js', 'lib/core.js', 'lib/client.js', 'lib/config.js', 'lib/extraction.js',
+    'lib/index.js', 'lib/core.js', 'lib/storage.js', 'lib/client.js', 'lib/config.js', 'lib/extraction.js',
     'bin/brain.mjs', 'cordis.patch.yml', 'scripts/install.ps1', 'scripts/uninstall.ps1'];
   for (const name of required) assert.ok(names.includes(name), `Missing package file: ${name}`);
   for (const name of names) {
     assert.ok(manifest.files.some(allowed => allowed.endsWith('/') ? name.startsWith(allowed) : name === allowed)
       || name === 'package.json', `Unexpected package file: ${name}`);
-    assert.doesNotMatch(name, /(?:^|\/)(?:brain\.json(?:\..*)?|\.env(?:\..*)?|node_modules|artifacts|\.git|\.brain\.lock)(?:\/|$)|\.(?:tgz|pem|key|log)$/i);
+    assert.doesNotMatch(name, /(?:^|\/)(?:brain\.(?:json|sqlite)(?:\..*)?|\.env(?:\..*)?|node_modules|artifacts|\.git|\.brain\.lock)(?:\/|$)|\.(?:tgz|pem|key|log)$/i);
   }
   run(process.execPath, [npm, 'install', '--prefix', directory, '--ignore-scripts', '--no-audit', '--no-fund', join(directory, pack.filename)], directory);
   const installed = join(directory, 'node_modules', ...manifest.name.split('/'));
@@ -44,6 +50,13 @@ try {
   assert.ok(record.id);
   const records = JSON.parse(run(process.execPath, [cli, '--data-dir', data, 'list']));
   assert.equal(records[0].text, 'Synthetic package smoke preference');
+  await readFile(join(data, 'brain.sqlite'));
+  await assert.rejects(readFile(join(data, 'brain.json')), { code: 'ENOENT' });
+  const backup = join(directory, 'synthetic-export.json');
+  run(process.execPath, [cli, '--data-dir', data, 'export', backup]);
+  const exported = JSON.parse(await readFile(backup, 'utf8'));
+  assert.equal(exported.schemaVersion, 1);
+  assert.equal(exported.memories[0].text, 'Synthetic package smoke preference');
   const bin = process.platform === 'win32' ? join(directory, 'node_modules/.bin/dsh-brain.cmd') : join(directory, 'node_modules/.bin/dsh-brain');
   // npm creates a platform-specific executable shim; verify it is present.
   await readFile(bin);

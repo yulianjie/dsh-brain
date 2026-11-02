@@ -13,7 +13,8 @@ async function fixture(t, options = {}) {
   t.after(() => rm(dataDir, { recursive: true, force: true }));
   return { dataDir, brain: await new Brain({ dataDir, ...options }).init() };
 }
-const learn = (b, turn, userText, extra = {}) => b.learn({ sessionId: 'stability-audit', turnId: String(turn), userText, ...extra });
+const learn = (b, turn, userText, extra = {}) => b.learn({ sessionId: 'stability-audit', turnId: String(turn), userText,
+  ...(/^请记住/.test(userText) && !extra.extraction ? { extraction: { memories: [{ text: userText.replace(/^请记住[：:,，\s]*/, ''), evidence: userText, scope: 'global', kind: 'preference', confidence: .9 }], feedback: [] } } : {}), ...extra });
 
 test('global preferences survive restart and unrelated queries across projects; workspace facts stay scoped', async t => {
   const { brain, dataDir } = await fixture(t);
@@ -93,10 +94,10 @@ test('consistent feedback converges with bounded steps; frozen/manual/off modes 
 test('project-specific and temporary feedback cannot alter the global persona', async t => {
   const { brain, dataDir } = await fixture(t);
   const workspace = path.join(dataDir, 'a');
-  for (let i = 0; i < 4; i++) await learn(brain, i, '本项目以后回答请详细展开。', { workspace });
+  for (let i = 0; i < 4; i++) await learn(brain, i, '本项目以后回答请详细展开。', { workspace, extraction: { memories: [{ text: '本项目回答偏详细。', evidence: '本项目以后回答请详细展开。', scope: 'workspace', kind: 'preference', confidence: .9 }], feedback: [] } });
   assert.equal((await brain.personality()).traits.verbosity, 0.5);
-  assert.ok(brain.context({ workspace, query: '回答' }).includes('本项目以后回答'));
-  assert.ok(!brain.context({ query: '回答' }).includes('本项目以后回答'));
+  assert.ok(brain.context({ workspace, query: '回答' }).includes('本项目回答偏详细'));
+  assert.ok(!brain.context({ query: '回答' }).includes('本项目回答偏详细'));
   const evidence = '回答请详细展开';
   const result = validateExtraction({ userText: '本项目以后回答请详细展开。', extraction: { feedback: [{ trait: 'verbosity', value: 0.9, confidence: 1, evidence }] } });
   assert.equal(result.feedback.length, 0);

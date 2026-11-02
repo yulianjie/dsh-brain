@@ -12,10 +12,10 @@
 ## 功能一览
 
 - **跨会话记忆**：全局偏好与工作区事实分开检索，支持中英文；相似记忆在写入时合并进既有记录，瞬时任务状态过不了提取的价值门槛，删除有去重标记。
-- **有证据的自动学习**：只处理已完成根轮次的用户文本，限制模型调用、超时与后台队列。
+- **有证据的自动学习**：只处理已完成根轮次的用户文本；自动记忆正文由模型整理为摘要，原始 evidence 单独保存作追溯校验，不注入对话。
 - **可控交流风格**：五维渐进调整，以及自动、手动、关闭模式；支持冻结、历史和回退。
 - **原生配置与管理**：Desktop 中的 23 项设置、`/brain` 命令、六个模型工具和本地 CLI。
-- **可检查的本地存储**：JSON、原子替换、并发锁、导入导出；无独立数据库服务。
+- **本地 SQLite 存储**：使用 Node 内建 `node:sqlite`、SQL 表和事务；无需 native npm 数据库依赖或独立数据库服务。JSON schemaVersion 1 导入导出仍可用。
 
 自动提取和召回仍会使用宿主模型上下文；“本地存储”不等于“完全离线”。详见[数据边界](#数据边界与限制)。
 
@@ -25,47 +25,51 @@
 
 ## 兼容性
 
-当前版本 `0.5.0`，按 Windows Desktop **bundled runtime 0.2.1-rc.3** 的实际 API 实现。JavaScript ESM 核心使用 Node 内建模块；原生配置 schema 依赖 `@deepseek-ai/schemastery`。管理 CLI 需要 Node.js 22 或以上；插件由 Desktop 自带的 Node 运行。不保证其他版本的宿主接口兼容。
+版本为 `0.6.0`。Node.js 22.13 起可直接导入 `node:sqlite`，无需启动 flag；本机对 Node.js 22.13.0 Windows、24.14.1 和 Desktop 内置 24.21.0 均做过验证。原生配置 schema 依赖 `@deepseek-ai/schemastery`。本机 Desktop bundled runtime `0.2.1-rc.5`（Electron 44.7.0）通过 runtime smoke；调用使用合成 provider adapter，不是在线 LLM 质量评测。其他宿主版本需重新验证。完整本地验证范围见 [0.6.0 验证记录](docs/releases/v0.6.0.md)。
 
 | 层级 | 支持与验证范围 |
 | --- | --- |
-| 核心与 CLI | Node.js 22+；CI 覆盖 Node 22/24 与 Windows、Linux、macOS |
-| Desktop 插件与原生设置 | Windows bundled runtime 0.2.1-rc.3；其他宿主版本需重新验证 |
+| 核心与 CLI | Node.js >=22.13；CI 覆盖 Node 22/24 与 Windows、Linux、macOS |
+| Desktop 插件与原生设置 | 本机 bundled runtime 0.2.1-rc.5（Electron 44.7.0、Node 24.21.0）；runtime smoke 已通过 |
 | 安装/卸载脚本 | Windows PowerShell，使用 Desktop 自带 CLI |
 | 设置界面与 CLI 帮助 | 当前为中文；提供英文入门文档 |
 
+### 远端发布验证（此源码快照）
+
+准备此源码快照时，本地源码、包安装和 Desktop runtime 验证已完成；最终 tag 的 GitHub CI、GitHub Release 资产、npm 发布及 registry tarball 校验尚待 release workflow 运行。最终结果以 [0.6.0 验证记录](docs/releases/v0.6.0.md)和 GitHub Actions 为准。下方安装命令须在 v0.6.0 发布后使用。
+
 ## 安装与卸载
 
-正式包名为 **`@yulianjie/dsh-brain`**。npm 上不带 scope 的 `dsh-brain` 属于其他项目，请勿混用。前提：目标版本 DeepSeek Harness Desktop；独立管理 CLI 需要 Node.js 22+。已有本项目 0.1.0/0.2.0 本地包时，先按下方迁移说明移除旧包。
+正式包名为 **`@yulianjie/dsh-brain`**。npm 上不带 scope 的 `dsh-brain` 属于其他项目，请勿混用。Node.js CLI 最低版本为 `22.13`。下方 npm 和 Release 命令针对 0.6.0；远端发布状态见上方的待验证项。
 
-### 从 npm 安装（推荐）
+### 从 npm 安装（发布完成后）
 
 在 PowerShell 中调用 Desktop 自带 CLI；不要使用全局 npm 安装的其他版本 DSH：
 
 ```powershell
 $dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
-& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.5.0'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.6.0'
 ```
 
-只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.5.0`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
+只安装独立管理 CLI 时使用 `npm.cmd install -g @yulianjie/dsh-brain@0.6.0`，然后运行 `dsh-brain --help`。全局安装 CLI 不会自动把插件加入 Desktop profile。
 
-### 从 GitHub Release 安装
+### 从 GitHub Release 安装（发布完成后）
 
-从 [v0.5.0 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.5.0) 下载 `yulianjie-dsh-brain-0.5.0.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
+从 [v0.6.0 Release](https://github.com/yulianjie/dsh-brain/releases/tag/v0.6.0) 下载 `yulianjie-dsh-brain-0.6.0.tgz` 和 `SHA256SUMS.txt`，放到同一目录，校验后安装：
 
 ```powershell
 $expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
-$actual = (Get-FileHash .\yulianjie-dsh-brain-0.5.0.tgz -Algorithm SHA256).Hash
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.6.0.tgz -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'SHA256 mismatch' }
-tar -xf .\yulianjie-dsh-brain-0.5.0.tgz
-.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz
+tar -xf .\yulianjie-dsh-brain-0.6.0.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.6.0.tgz
 ```
 
 安装仍需下载 npm 依赖；tarball 未内置 `node_modules`。
 
 ### 从源码安装
 
-另需 Git、Node.js 22+ 与 npm。源码无需编译：
+另需 Git、Node.js >=22.13 与 npm。源码无需编译：
 
 ```powershell
 git clone https://github.com/yulianjie/dsh-brain.git
@@ -73,7 +77,7 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.6.0.tgz
 ```
 
 重启 Desktop 后，在插件列表确认 `@yulianjie/dsh-brain`，再用 `/brain status` 检查状态。可以先用 `/brain remember global 我喜欢中文回答` 保存一条明确偏好，并通过 `/brain list global` 查看。
@@ -84,7 +88,7 @@ npm.cmd pack
 
 ```powershell
 .\scripts\install.ps1 -DryRun
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.6.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
@@ -104,11 +108,11 @@ npm.cmd pack
 
 本项目旧本地包的名称为 `dsh-brain`。先导出记忆备份并保留现有 profile 配置，再使用 Desktop 自带 CLI 对同一个 profile 执行 `plugin --profile desktop remove dsh-brain`，之后安装 scoped 包并正常重启 Desktop。不要从 npm 安装旧的不带 scope 的名称。安装脚本发现旧依赖时会停止，避免两个 bundle 争用 `id: brain`。
 
-本版本保持 `id: brain`、默认数据路径与 schemaVersion=1；保持相同 `DSH_HOME` / `dataDir` 即可继续使用原有记忆、风格与历史。自定义 `id: brain` 配置覆盖应保留。迁移不会自动删除旧数据，也不会自动停止 Desktop。
+0.6.0 保持 `id: brain`、`dataDir` 和 JSON 导入导出 `schemaVersion: 1`。首次启动时会将同目录中的旧 `brain.json` 导入 `<dataDir>/brain.sqlite`，完成后原 JSON 按原字节保留为备份；导入在事务中进行，不覆盖原文件。现有记忆正文不会自动再次调用 LLM 改写。自定义 `id: brain` 配置覆盖应保留。迁移不会自动删除原 JSON，也不会自动停止 Desktop。默认最多 500 条记忆的限制保持不变。
 
 ## 日常使用
 
-可以直接说“请记住：我喜欢中文回答”“本项目使用 Rust”，也可以用明确命令管理。自动提取只处理已完成的根 agent 轮次中的用户文本，不把助手回答、工具输出或子 agent 发言作为用户偏好证据。它不会扫描已有聊天历史，也不会导入其他 agent 的记忆。
+提取模型可用时，可以直接说“请记住：我喜欢中文回答”“本项目使用 Rust”；没有可用模型时，自动学习不会把本轮原文保存为记忆。需要直接保存指定文本时，使用 `/brain remember` 或 CLI `remember`。自动提取只处理已完成的根 agent 轮次中的用户文本，不把助手回答、工具输出或子 agent 发言作为用户偏好证据。它不会扫描已有聊天历史，也不会导入其他 agent 的记忆。
 
 可用 `/brain` 命令：
 
@@ -129,7 +133,7 @@ npm.cmd pack
 | `/brain history` | 查看有限变更历史 |
 | `/brain rollback <version>` | 回退到已有历史版本 |
 
-`remember` 省略范围时，有会话工作区则使用 `workspace`，否则使用 `global`。模型也可调用 `brain_search`、`brain_list`、`brain_read`、`brain_remember`、`brain_forget`、`brain_personality` 六个工具。同 scope 的相似记忆（含模型工具写入）会合并进既有记录而不是新建重复，`brain_remember` 的返回以 `merged:true` 标记这种情况。导入导出和破坏性风格控制由用户命令或本地 CLI 执行。
+`remember` 省略范围时，有会话工作区则使用 `workspace`，否则使用 `global`。模型工具包括 `brain_search`、`brain_list`、`brain_read`、`brain_remember`、`brain_forget`、`brain_personality`。子 Agent 可调用只读的 search/list/read/personality 工具；记忆写入与遗忘工具及 `/brain` 修改命令仅根 Agent 可用。同 scope 的相似记忆会合并进既有记录而不是新建重复，`brain_remember` 的返回以 `merged:true` 标记这种情况。导入导出和破坏性风格控制由用户命令或本地 CLI 执行。
 
 范围边界：全局偏好可用于所有项目；工作区事实仅提供给路径相同的会话。工作区由宿主会话 cwd 获取，不使用插件进程的 cwd 猜测。它按目录路径隔离，工作区改名或迁移后需要重新整理记录。
 
@@ -139,7 +143,7 @@ npm.cmd pack
 
 自动上下文先选少量全局 `preference` / `instruction`，使语言等偏好在无关键词重合时仍可用，再按相关度选取全局事实与当前工作区内容。最多 3 条常驻候选且不超过总条数预算的约三分之一；无关全局偏好最多使用约三分之一的估算 Token 预算。长记录提供最多 400 个 Unicode 码点的预览，可按 ID 取全文。更多偏好仍可通过工具检索，并非全部常驻。
 
-召回跟随当前这一轮的用户消息，并参考本会话之前两条用户消息作为上下文；本轮自己的消息按消息 id 排除，没有 id 时按文本包含关系排除。“继续”“好的”“收到”“谢谢”“ok”“方案 2”这类确认、选项和泛泛追问会被忽略，不会带入新记忆。可注入记忆达到 20 条后，只命中一个词或一段连续词组（不论多长，查询里重复的词也只算一次，如“数据库”“数据库连接”）、且其中没有罕见词项的记忆算弱匹配：最多 3 条，已经显示的弱匹配也计入；对话进行中，弱匹配还必须和之前两轮共享词语。罕见词项指最多出现在 max(2, min(3, 记忆数的 5%)) 条记忆里的词，所以在 20 条以上的库里，不论库多大，一个词通常最多带入 3 条记忆（各段分别在不同记忆里罕见的长词组仍可能多带几条）；大库里单一概念的问题只带入最好的 3 条，其余可让模型调用 `brain_search`。少数词（如“确认”“酒吧”）是停用词或含助词，不能单独触发召回。本对话参考消息里已经出现的记忆会保留，直到新的强匹配在条数或预算上把它挤出，所以工具调用的多个步骤和“继续”这类轮次不会改变已选记忆；无关的全局偏好仍最多占约三分之一的 Token 预算。子 Agent 不会收到 Brain 参考消息，因此也看不到代码注释语言这类全局偏好，需要父 Agent 转述，或由子 Agent 调用 `brain_search`。每条记忆标注 `from`（`this chat` 本对话、`earlier chat` 其他对话、`saved by user` 用户保存、`saved by assistant` 模型工具保存、`unknown` 来源不明）和 `saved`（最后保存日期）；不是来自本对话的条目只作为可能过时或无关的背景。读取对话时只看本会话界面上已有的真实用户消息，不读工具输出、助手回复、其他会话或子 Agent。
+召回跟随当前这一轮的用户消息，并参考本会话之前两条用户消息作为上下文；本轮自己的消息按消息 id 排除，没有 id 时按文本包含关系排除。“继续”“好的”“收到”“谢谢”“ok”“方案 2”这类确认、选项和泛泛追问会被忽略，不会带入新记忆。可注入记忆达到 20 条后，只命中一个词或一段连续词组（不论多长，查询里重复的词也只算一次，如“数据库”“数据库连接”）、且其中没有罕见词项的记忆算弱匹配：最多 3 条，已经显示的弱匹配也计入；对话进行中，弱匹配还必须和之前两轮共享词语。罕见词项指最多出现在 max(2, min(3, 记忆数的 5%)) 条记忆里的词，所以在 20 条以上的库里，不论库多大，一个词通常最多带入 3 条记忆（各段分别在不同记忆里罕见的长词组仍可能多带几条）；大库里单一概念的问题只带入最好的 3 条，其余可让模型调用 `brain_search`。少数词（如“确认”“酒吧”）是停用词或含助词，不能单独触发召回。没有可匹配主题词项的轮次沿用当前参考，使工具步骤和无内容轮次稳定；有主题时按当前轮相关度重选并应用相对下限，通过门槛的强新话题会清除仅由历史保留的无关旧引用。弱候选可由最近两轮用户历史的共享证据支持为相关续接；历史本身不能引入候选，也不能提高相关度下限。无关的全局偏好仍最多占约三分之一的 Token 预算。子 Agent 不会收到 Brain 参考消息，因此也看不到代码注释语言这类全局偏好，需要父 Agent 转述，或由子 Agent 调用 `brain_search`。每条记忆标注 `from`（`this chat` 本对话、`earlier chat` 其他对话、`saved by user` 用户保存、`saved by assistant` 模型工具保存、`unknown` 来源不明）和 `saved`（最后保存日期）；不是来自本对话的条目只作为可能过时或无关的背景。读取对话时只看本会话界面上已有的真实用户消息，不读工具输出、助手回复、其他会话或子 Agent。
 
 - `brain_list` / `brain_search` 支持 `scope`、`limit`（1..20，默认 10）、`cursor`，返回 `{records,total,nextCursor}`。预览的 `truncated:true` 表示正文尚未完整读取。
 - `brain_read({id,cursor?})` 返回 `{id,scope,text,nextCursor}`，逐页拼接 `text` 可获得原文。工作区权限对全文读取同样生效。
@@ -162,7 +166,7 @@ npm.cmd pack
 
 同一维度最近最多 5 次有效反馈中，至少 **3 个独立轮次且不少于 75%** 支持同一方向，最新反馈也同向，才自动变化；每轮变化不超过 `0.05`，距离目标不超过 `0.05` 时停止微调。矛盾反馈不取平均后继续漂移；项目专属或临时风格要求不改变全局性格。重复事件不会重复计数；冻结期间不积攒稍后突然生效的漂移。人工设置立即生效，历史最多保留 100 条，每维度反馈证据最多保留 20 条。不能根据人口学信息推断交流风格。
 
-模型提取支持有用户原文证据的明确风格反馈，包括固定表达之外的语义反馈。本地兜底只识别有限的中英文表达，例如“以后回答简洁一点”“回复可以更温暖”“不要开玩笑”，可能漏掉同义表达。本地规则只在提取模型不可用（超时、出错、输出无法解析）时用于学习风格；模型正常返回时，风格只按模型给出的、带用户原文证据的反馈学习。自动学习的全局风格反馈可以在列表中查看，但不会作为立即生效的偏好原句注入，避免绕过逐步变化和冻结控制。
+模型提取支持有用户原文证据的明确风格反馈，包括固定表达之外的语义反馈。提取模型不可用（超时、出错、输出无法解析）时，本地规则只对交流风格的数值反馈作有限降级；它不会把本轮用户原文自动保存成记忆。模型正常返回时，自动记忆正文使用模型整理的摘要，独立保存的原始 evidence 只用于校验与追溯，不会注入对话。需要直接保存原句时，可明确使用 `/brain remember` 或 CLI `remember`。自动学习的全局风格反馈可以在列表中查看，但不会作为立即生效的偏好原句注入，避免绕过逐步变化和冻结控制。
 
 ## 本地管理 CLI
 
@@ -210,9 +214,9 @@ node .\bin\brain.mjs --data-dir "$env:TEMP\brain-sandbox" remember "合成测试
 
 设置保存后作用于后续请求。关闭自动学习会取消等待及进行中的后台提取；已经进入原子提交的写入不会被回滚。切换风格模式或学习开关时，旧任务不会在稍后重新作用于风格。
 
-默认存储为 `$DSH_HOME/brain/brain.json`，未设置 `DSH_HOME` 时为 `~/.dsh/brain/brain.json`。不同 profile 若使用同一个 `DSH_HOME` 和默认目录，将共享同一份全局偏好与风格；工作区记录仍按路径隔离。需要不同身份时，为各 profile 配置不同 `dataDir`。
+默认数据库为 `$DSH_HOME/brain/brain.sqlite`，未设置 `DSH_HOME` 时为 `~/.dsh/brain/brain.sqlite`。不同 profile 若使用同一个 `DSH_HOME` 和默认目录，将共享同一份全局偏好与风格；工作区记录仍按路径隔离。需要不同身份时，为各 profile 配置不同 `dataDir`。0.6.0 首次启动若发现旧 `brain.json`，会以事务导入 SQLite，并保留原 JSON 原样备份；迁移不调用 LLM 重写旧记忆。数据库包含记忆、风格、历史、去重与处理状态等 SQL 表，通过事务修改，无需文件锁目录。空提取不会写入已处理轮次；账本只保留最近 4096 个有效轮次，超出窗口后不保证旧轮次仍具备幂等性。删除哈希永久保留以阻止旧备份复活已遗忘记忆，普通记忆召回不会读取这些账本。
 
-插件采用 JSON 原子替换和独立写锁目录 `.brain.lock`，跨进程修改在锁内重新读取并合并。遇到损坏 JSON、未知 schema 或非法数据会报错并保留原文件。写入锁等待默认 15 秒；同机崩溃残留的 `.brain.lock` 会在确认原进程已退出后自动接管，其他情况（不同主机、缺少 `host` 的旧锁、仍在运行的写入者）仍需确认写入者退出后手动移除 `.brain.lock`（如存在 `.brain.lock.takeover` 也一并处理）。存储不是加密数据库，文件权限仍由系统和用户账户决定。
+SQLite 数据库不是加密存储，文件权限仍由系统和用户账户决定。损坏或不支持的数据库会报错；保留原数据库、SQLite 伴随文件和旧 JSON 备份以便检查，不要通过删除数据文件来隐藏错误。SQLite 写事务负责保持一致性；避免手工复制正在被写入的数据库。
 
 `dataDir` 属于结构性高级设置，不在图形表单中暴露。需要它或其他配置文件 override 时，可在对应 profile 现有的 `cordis.patch.yml` 数组中追加针对 `id: brain` 的条目。例如禁用自动学习：
 
@@ -244,13 +248,13 @@ node .\bin\brain.mjs --data-dir "$env:TEMP\brain-sandbox" remember "合成测试
 | `maxToolResultChars` | `6000` | 模型记忆工具每页字符上限，范围 512..50000 |
 | `maxToolResultTokens` | `2000` | 模型记忆工具每页估算 Token 上限，范围 128..16000 |
 | `maxContextMemories` | `10` | 每次注入记忆条数上限，范围 0..100 |
-| `lockTimeoutMs` | `15000` | 写锁等待时间，范围 0..120000 毫秒 |
+| `lockTimeoutMs` | `15000` | SQLite 写事务遇到并发占用时的等待时间，范围 0..120000 毫秒 |
 
-后台同时最多一个模型提取调用，每轮最多调用一次；队列满时丢弃新增任务，不无限重试。超时后使用中英文明确偏好的本地兜底提取；若 provider 忽略取消信号，其调用未结束前不会开启另一个模型调用。自动提取可能使用当前已配置模型并产生费用；关闭 `autoLearn` 可停用。没有模型路由时，只进行明确偏好与“请记住”的保守本地提取。
+后台同时最多一个模型提取调用，每轮最多调用一次；队列满时丢弃新增任务，不无限重试。模型不可用时不会把用户原文自动存为记忆；仅交流风格的数值反馈可由本地规则有限降级处理。显式 `/brain remember` 与 CLI `remember` 仍按用户提供的文本直接保存。若 provider 忽略取消信号，其调用未结束前不会开启另一个模型调用。自动提取可能使用当前已配置模型并产生费用；关闭 `autoLearn` 可停用。
 
 ## 数据边界与限制
 
-记忆作为独立的低优先级参考消息注入，文本不经过模板插值，当前用户指令优先。每个模型请求最多保留一个当前 Brain 快照，通过宿主持久化 surface replacement 更新；磁盘事件历史保留原文。升级时只清理旧共享快照中的 Brain 命名分节，其他插件内容保留。系统同时限制条数、字符和估算 Token；检索使用英文词和中文字二元组，不是向量数据库。自动提取要求逐字用户证据，持久化证据原句，避免把模型改写中的猜测存为事实。
+记忆作为独立的低优先级参考消息注入，文本不经过模板插值，当前用户指令优先。每个模型请求最多保留一个当前 Brain 快照，通过宿主持久化 surface replacement 更新；SQLite 存储模型整理后的记忆正文和独立原始 evidence，evidence 只用于验证与追溯，不注入模型上下文。导出仍为 JSON `schemaVersion: 1`，导入时沿用默认 500 条记忆上限。系统同时限制条数、字符和估算 Token；检索使用英文词和中文字二元组，不是向量数据库。旧 JSON 文件导入时不会自动发送给 LLM 或重新整理。
 
 明显的 API key、Bearer token、密码赋值、私钥和含密码 URL 会被过滤；这是启发式过滤，不能识别所有秘密。不要主动要求插件记住敏感凭据。插件不会上传独立记忆库，但自动提取通过当前宿主模型处理本轮用户文本，后续被召回的记忆也会进入宿主正常模型上下文。
 

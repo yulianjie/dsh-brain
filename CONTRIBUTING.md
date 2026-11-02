@@ -5,7 +5,7 @@
 
 ## Development setup
 
-Use Node.js 22 or newer and npm. No build step or global DSH installation is needed
+Use Node.js 22.13 or newer and npm. No build step or global DSH installation is needed
 for the core, CLI, and unit tests.
 
 ```sh
@@ -36,7 +36,7 @@ It never installs into your real Desktop profile.
 
 ## Host integration
 
-Windows Desktop integration targets bundled runtime **0.2.1-rc.3**. Run
+Windows Desktop integration targets bundled runtime **0.2.1-rc.5**. Run
 `npm run test:runtime` with that Desktop installed; set `DSH_DESKTOP_EXE` for a
 non-default executable. This uses temporary synthetic profiles and a controlled
 provider. It does not prove native window behavior or real model quality.
@@ -55,7 +55,8 @@ and [release checks](docs/RELEASING.md).
   queues, atomic writes and non-destructive failure behavior intact.
 - Avoid silently migrating, resetting or discarding a user's store. Document and
   test any schema change and its recovery path.
-- Do not commit `brain.json`, exports, profiles, credentials, generated tarballs,
+- Do not commit `brain.json`, `brain.sqlite` or its sidecars, exports, profiles,
+  credentials, generated tarballs,
   copied host packages, or files from ignored local verification directories.
 - Dependency licenses remain distinct from the project's Apache-2.0 license.
 

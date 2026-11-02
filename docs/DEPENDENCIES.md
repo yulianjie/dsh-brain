@@ -10,14 +10,21 @@ versions and integrity hashes; `npm ci` reproduces that dependency graph.
 | `@deepseek-ai/cosmokit` | 1.8.6 | Transitive schema dependency | MIT |
 | `@standard-schema/spec` | 1.1.0 | Transitive schema dependency | MIT |
 
+SQLite is provided by Node's built-in `node:sqlite` module (minimum Node.js
+22.13); it is not an npm dependency and adds no native package to the install.
+
 The npm package does not bundle `node_modules`; npm installs dependencies with
 their own license files. When redistributing dependencies together with the
 project, retain their original license and attribution files. Recheck this table
 against the lockfile when updating dependencies.
 
 Desktop provides Cordis, the agent/session/LLM services, `tokenMeter`, React and UI primitives.
-The context integration targets Desktop runtime 0.2.1-rc.3 and requires its
-durable single-node surface replacement and token metering contracts.
+The local Desktop bundled runtime is 0.2.1-rc.5 (Electron 44.7.0, Node.js 24.21.0), which
+provides `node:sqlite`. The 0.6.0 source passed runtime smoke against app.asar's
+Cordis 4.0.5 and agentLoop 0.2.1-rc.5 services, including its durable single-node
+surface replacement and token-metering contracts. It used a synthetic provider
+adapter, not an online LLM quality evaluation. See the
+[0.6.0 verification draft](releases/v0.6.0.md).
 These host packages are not vendored or redistributed here. The optional runtime
 smoke script reads executable packages from a locally installed Desktop into a
 temporary directory and removes that directory afterward. It does not copy host

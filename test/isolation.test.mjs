@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Brain } from '../lib/core.js';
@@ -29,6 +29,7 @@ const memoryLines = text => text.split('\n').filter(line => line.startsWith('{')
 const lineIds = text => memoryLines(text).map(line => line.id);
 const byId = text => new Map(memoryLines(text).map(line => [line.id, line]));
 const remember = (brain, workspace, text, extra = {}) => brain.remember({ text, scope: 'workspace', workspace, ...extra });
+const extraction = (text, evidence) => ({ memories: [{ text, kind: 'fact', scope: 'workspace', confidence: 0.9, evidence }], feedback: [] });
 
 test('an empty query injects only the core global preferences', async t => {
   const { brain, workspace } = await fixture(t);
@@ -68,7 +69,8 @@ test('each injected line says where it came from and when it was last saved', as
 test('a credential-like session id is hashed by learn() and still labels its own memories', async t => {
   const { brain, workspace } = await fixture(t);
   const sessionId = 'token=synthetic-session-0001';
-  await brain.learn({ sessionId, turnId: '1', workspace, userText: '请记住：本项目的构建产物放在 dist 目录' });
+  const userText = '请记住：本项目的构建产物放在 dist 目录';
+  await brain.learn({ sessionId, turnId: '1', workspace, userText, extraction: extraction('本项目的构建产物放在 dist 目录', userText) });
   const [record] = await brain.list({ workspace });
   assert.match(record.source, /^user-turn:[a-f0-9]{64}:1$/);
   assert.ok(!record.source.includes('synthetic-session'));
@@ -78,7 +80,8 @@ test('a credential-like session id is hashed by learn() and still labels its own
 
 test('a session id containing colons is read up to the last colon of the source', async t => {
   const { brain, workspace } = await fixture(t);
-  await brain.learn({ sessionId: 'desk:session:7', turnId: '12', workspace, userText: '请记住：本项目的文档站点用 VitePress' });
+  const userText = '请记住：本项目的文档站点用 VitePress';
+  await brain.learn({ sessionId: 'desk:session:7', turnId: '12', workspace, userText, extraction: extraction('本项目的文档站点用 VitePress', userText) });
   const [record] = await brain.list({ workspace });
   assert.equal(record.source, 'user-turn:desk:session:7:12');
   assert.equal(byId(brain.context({ workspace, query: 'VitePress', session: 'desk:session:7' })).get(record.id).from, 'this chat');
@@ -103,16 +106,16 @@ test('incumbents stay through contentless turns, drop out when forgotten and nev
   assert.deepEqual(lineIds(brain.context({ workspace, query: '继续', keep })), [rollback.id]);
 });
 
-test('new strong matches displace incumbents beyond the memory count', async t => {
+test('new strong matches displace unrelated incumbents and leave unused slots empty', async t => {
   const { brain, workspace } = await fixture(t, { maxContextMemories: 3 });
   const incumbents = [];
   for (const text of ['登录接口超时阈值设为 30 秒', '登录失败三次后锁定账户', '登录页的验证码由前端渲染']) incumbents.push((await remember(brain, workspace, text)).id);
   const fresh = [];
   for (const text of ['数据库连接池上限 20', '数据库连接超时 5 秒']) fresh.push((await remember(brain, workspace, text)).id);
   const shown = lineIds(brain.context({ workspace, query: '数据库连接池满了', keep: incumbents }));
-  assert.equal(shown.length, 3);
+  assert.equal(shown.length, 2);
   assert.ok(fresh.every(id => shown.includes(id)));
-  assert.equal(shown.filter(id => incumbents.includes(id)).length, 1);
+  assert.equal(shown.filter(id => incumbents.includes(id)).length, 0);
 });
 
 test('the reference keeps the exact header, id-sorted lines and reports the selected ids', async t => {
@@ -317,7 +320,7 @@ test('referenceIds reads the ids of the latest Brain reference and never throws'
   for (const broken of [undefined, {}, { surface: { nodes: [0] }, eventAt() { throw new Error('host failure'); }, deriveEventMessage() {} }]) assert.deepEqual(referenceIds(broken), []);
 });
 
-test('a root conversation keeps the memories it already shows and adds new strong matches', async t => {
+test('a root conversation keeps topical memories but replaces them on a topic switch', async t => {
   const state = await integration(t);
   const ids = await seedCorpus(state);
   assert.equal((await state.brain.list({ workspace: state.workspace })).length, 30);
@@ -334,9 +337,8 @@ test('a root conversation keeps the memories it already shows and adds new stron
   state.claim(state.root, 3, '看下数据库连接池');
   const shown = lineIds(state.contextFor(state.root));
   const db = TOPICS.db.map(text => ids.get(text));
-  assert.ok(login.every(id => shown.includes(id)));
   assert.ok([db[0], db[4]].every(id => shown.includes(id)));
-  assert.ok(shown.every(id => login.includes(id) || db.includes(id)));
+  assert.ok(shown.every(id => db.includes(id)));
   // The request hook rewrites the single reference node with the new selection.
   await state.handlers.get('agent/request')({ agent: state.root, signal: new AbortController().signal }, async () => ({}));
   assert.deepEqual(referenceIds(session), shown);
@@ -377,8 +379,10 @@ test('a current message longer than extractionMaxChars is still kept out of hist
 test('memories learned in this root session are labelled this chat', async t => {
   const state = await integration(t);
   assert.notEqual(state.root.id, state.root.session.id);
-  await state.brain.learn({ sessionId: state.root.session.id, turnId: '1', workspace: state.workspace, userText: '请记住：本项目的文档站点用 VitePress' });
-  await state.brain.learn({ sessionId: 'another-session', turnId: '1', workspace: state.workspace, userText: '请记住：本项目的组件库用 Storybook' });
+  const mineText = '请记住：本项目的文档站点用 VitePress';
+  const otherText = '请记住：本项目的组件库用 Storybook';
+  await state.brain.learn({ sessionId: state.root.session.id, turnId: '1', workspace: state.workspace, userText: mineText, extraction: extraction('本项目的文档站点用 VitePress', mineText) });
+  await state.brain.learn({ sessionId: 'another-session', turnId: '1', workspace: state.workspace, userText: otherText, extraction: extraction('本项目的组件库用 Storybook', otherText) });
   const records = await state.brain.list({ workspace: state.workspace });
   const mine = records.find(record => record.text.includes('VitePress')), other = records.find(record => record.text.includes('Storybook'));
   state.claim(state.root, 1, 'VitePress 和 Storybook 怎么部署', 'u-1');
@@ -464,14 +468,11 @@ test('a previous message counts as history only up to 2000 code points', async t
   }
 });
 
-test('the memo notices a hand edit that keeps id and updatedAt', async t => {
+test('an explicit same-id rewrite refreshes relevance for the new text', async t => {
   const { brain, workspace } = await fixture(t);
   const record = await remember(brain, workspace, 'ORBIT 部署清单放在 deploy 目录');
   assert.deepEqual(lineIds(brain.context({ workspace, query: 'ORBIT' })), [record.id]);
-  const state = JSON.parse(await readFile(brain.file, 'utf8'));
-  state.memories[0].text = 'PULSAR 部署清单放在 deploy 目录里';
-  assert.equal(state.memories[0].updatedAt, record.updatedAt);
-  await writeFile(brain.file, `${JSON.stringify(state, null, 2)}\n`);
+  await brain.remember({ id: record.id, text: 'PULSAR 部署清单放在 deploy 目录', scope: 'workspace', workspace });
   assert.deepEqual(lineIds(brain.context({ workspace, query: 'PULSAR' })), [record.id]);
   assert.deepEqual(lineIds(brain.context({ workspace, query: 'ORBIT' })), []);
 });

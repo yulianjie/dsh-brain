@@ -6,10 +6,10 @@ artifacts/
 .runtime-inspect/
 .config-inspect/
 coverage/
+brain.sqlite*
 brain.json
 brain.json.*
 brain-backup*.json
-.brain.lock/
 .env
 .env.*
 !.env.example

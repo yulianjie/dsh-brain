@@ -54,10 +54,10 @@ test('CLI personality controls survive separate processes and reject malformed i
     run(dir, 'rollback', String(manualVersion));
     assert.equal(run(dir, 'personality').traits.verbosity, 0.2);
     assert.ok(run(dir, 'history').length > 0);
-    const before = await readFile(join(dir, 'brain.json'), 'utf8');
+    const before = await readFile(join(dir, 'brain.sqlite'), 'utf8');
     const invalid = spawnSync(process.execPath, [cli, '--data-dir', dir, 'personality', 'set', 'verbosity', 'NaN'], { encoding: 'utf8' });
     assert.equal(invalid.status, 1);
-    assert.equal(await readFile(join(dir, 'brain.json'), 'utf8'), before);
+    assert.equal(await readFile(join(dir, 'brain.sqlite'), 'utf8'), before);
     const scope = spawnSync(process.execPath, [cli, '--data-dir', dir, 'remember', 'bad', '--scope', 'workspace'], { encoding: 'utf8' });
     assert.equal(scope.status, 1);
   } finally { await rm(dir, { recursive: true, force: true }); }

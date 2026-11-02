@@ -35,13 +35,13 @@ test('cross-naming-style keys merge by canonical form and keep the rich existing
   assert.equal(result.remembered[0].text, rich);
 });
 
-test('a fallback 请记住 restatement merges into the record it contains', async t => {
+test('an unavailable model leaves a remembered claim unchanged', async t => {
   const { brain } = await fixture(t);
   await brain.remember({ text: '以后你就是我的水手，名叫虫虫', scope: 'global', source: 'user-command', confidence: 1 });
   await learn(brain, 1, '请记住，以后你就是我的水手，名叫虫虫');
   const records = await brain.list();
   assert.equal(records.length, 1);
-  assert.equal(records[0].text, '请记住，以后你就是我的水手，名叫虫虫');
+  assert.equal(records[0].text, '以后你就是我的水手，名叫虫虫');
 });
 
 test('term-Jaccard merges at 0.92; the 0.6–0.75 review band and lower do not merge', async t => {
@@ -98,7 +98,7 @@ test('containment needs a shorter side of at least 6 code points', async t => {
   assert.equal((await brain.list()).length, 2);
 });
 
-test('an exact-key update keeps corrections but blocks degrading restatements', async t => {
+test('an exact-key update accepts both corrections and concise property rewrites', async t => {
   const { brain } = await fixture(t);
   await brain.remember({ text: '项目使用 Rust 2018 版。', scope: 'global', key: 'stack' });
   const corrected = await brain.rememberWithOutcome({ text: '项目使用 Rust 2021 版。', scope: 'global', key: 'stack' });
@@ -106,18 +106,78 @@ test('an exact-key update keeps corrections but blocks degrading restatements', 
   assert.equal(corrected.record.text, '项目使用 Rust 2021 版。');
   const degraded = await brain.rememberWithOutcome({ text: '用 Rust。', scope: 'global', key: 'stack' });
   assert.equal(degraded.merged, true);
-  assert.equal(degraded.record.text, '项目使用 Rust 2021 版。');
+  assert.equal(degraded.record.text, '用 Rust。');
   assert.equal((await brain.list()).length, 1);
 });
 
 test('an explicit id rewrite bypasses the 60% rule entirely', async t => {
   const { brain } = await fixture(t);
   const stored = await brain.remember({ text: '请称呼我为船长，在所有对话和项目中都保持这个称呼', scope: 'global', key: 'preferred-address' });
-  const rewritten = await brain.rememberWithOutcome({ id: stored.id, text: '叫我船长', scope: 'global', key: 'preferred-address' });
+  const rewritten = await brain.rememberWithOutcome({ id: stored.id, text: '叫我船长', scope: 'global', key: 'preferred-address', source: 'user-command' });
   assert.equal(rewritten.merged, true);
   assert.equal(rewritten.record.text, '叫我船长');
   assert.equal(rewritten.record.createdAt, stored.createdAt);
   assert.equal((await brain.list()).length, 1);
+});
+
+test('a valid same-scope updateOf cannot overwrite an unrelated claim', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const workspace = path.join(dataDir, 'project');
+  const old = await brain.remember({ text: 'CI流水线使用GitHub Actions。', scope: 'workspace', workspace, key: 'ci-pipeline' });
+  const userText = '本项目数据库使用 SQLite。';
+  const result = await learn(brain, 1, userText, { memories: [memory(userText, {
+    text: '本项目数据库使用 SQLite。', scope: 'workspace', workspace, key: 'ci-pipeline', updateOf: old.id,
+  })] }, { workspace });
+  const records = await brain.list({ workspace });
+  assert.equal(records.length, 2);
+  assert.equal(records.find(record => record.id === old.id)?.text, 'CI流水线使用GitHub Actions。');
+  const added = records.find(record => record.text.includes('SQLite'));
+  assert.ok(added);
+  assert.notEqual(added.id, old.id);
+  assert.equal(added.key, undefined, 'the unrelated model key is discarded');
+  assert.equal(result.remembered[0].id, added.id);
+});
+
+test('an exact model key cannot merge unrelated topics and its collision is discarded', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const workspace = path.join(dataDir, 'project');
+  const old = await brain.remember({ text: 'CI流水线使用GitHub Actions。', scope: 'workspace', workspace, key: 'same-key' });
+  const userText = '本项目数据库使用 SQLite。';
+  const result = await learn(brain, 1, userText, { memories: [memory(userText, {
+    text: '本项目数据库使用 SQLite。', scope: 'workspace', workspace, key: 'same-key',
+  })] }, { workspace });
+  const records = await brain.list({ workspace });
+  assert.equal(records.length, 2);
+  assert.equal(records.find(record => record.id === old.id)?.text, 'CI流水线使用GitHub Actions。');
+  const added = records.find(record => record.text.includes('SQLite'));
+  assert.ok(added);
+  assert.notEqual(added.id, old.id);
+  assert.equal(added.key, undefined);
+  assert.equal(result.remembered[0].id, added.id);
+
+  const toolWrite = await brain.rememberWithOutcome({ text: '本项目缓存使用 Redis。', scope: 'workspace', workspace, key: 'same-key', source: 'model-tool' });
+  assert.equal(toolWrite.merged, false);
+  assert.equal(toolWrite.record.key, undefined);
+  assert.equal((await brain.list({ workspace })).length, 3);
+});
+
+test('model-tool id updates are claim-checked while user-command id updates remain explicit', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const workspace = path.join(dataDir, 'project');
+  const old = await brain.remember({ text: 'CI流水线使用GitHub Actions。', scope: 'workspace', workspace, key: 'ci-pipeline' });
+  const rejected = await brain.rememberWithOutcome({ id: old.id, text: '本项目数据库使用 SQLite。', scope: 'workspace', workspace, key: 'ci-pipeline', source: 'model-tool' });
+  const afterModel = await brain.list({ workspace });
+  assert.equal(afterModel.length, 2);
+  assert.equal(afterModel.find(record => record.id === old.id)?.text, 'CI流水线使用GitHub Actions。');
+  const newFact = afterModel.find(record => record.text.includes('SQLite'));
+  assert.ok(newFact);
+  assert.equal(newFact.key, undefined);
+  assert.equal(rejected.record.id, newFact.id);
+
+  const forced = await brain.rememberWithOutcome({ id: old.id, text: '显式覆盖为另一个用户指定的内容', scope: 'workspace', workspace, source: 'user-command' });
+  assert.equal(forced.record.id, old.id);
+  assert.equal(forced.record.text, '显式覆盖为另一个用户指定的内容');
+  assert.equal((await brain.list({ workspace })).length, 2);
 });
 
 test('updateOf retargets the extraction at the named record inside the learn transaction', async t => {
@@ -129,6 +189,23 @@ test('updateOf retargets the extraction at the named record inside the learn tra
   assert.equal(records[0].id, stored.id);
   assert.equal(records[0].text, '称呼我为船长');
   assert.equal(result.remembered[0].id, stored.id);
+});
+
+test('a short UI-language correction still updates the matching property', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const workspace = path.join(dataDir, 'project');
+  const oldText = '默认语言为简体中文，所有界面文案、菜单与帮助提示均使用简体中文。';
+  const old = await brain.remember({ text: oldText, kind: 'preference', scope: 'workspace', workspace, key: 'preference:ui-language' });
+  const userText = '本项目默认语言改为英文。';
+  const result = await learn(brain, 1, userText, { memories: [memory(userText, {
+    text: '项目默认语言为英文。', kind: 'preference', scope: 'workspace', workspace,
+    key: 'preference:ui-language', updateOf: old.id,
+  })] }, { workspace });
+  const records = await brain.list({ workspace });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].id, old.id);
+  assert.equal(records[0].text, '项目默认语言为英文。');
+  assert.equal(result.remembered[0].id, old.id);
 });
 
 test('a stale or cross-scope updateOf degrades to a plain add without failing the turn', async t => {
@@ -156,14 +233,14 @@ test('merges keep the original identity, refresh updatedAt and take the maximum 
   const { brain } = await fixture(t);
   const first = await brain.remember({ text: '周会固定在每周五下午三点半。', scope: 'global', confidence: 0.5 });
   await new Promise(resolve => setTimeout(resolve, 5));
-  await learn(brain, 1, '请记住：周会固定在每周五下午三点半。');
+  await learn(brain, 1, '请记住：全局周会固定在每周五下午三点半。', { memories: [memory('请记住：全局周会固定在每周五下午三点半。', { text: '周会固定在每周五下午三点半。' })], feedback: [] });
   const merged = (await brain.list())[0];
   assert.equal((await brain.list()).length, 1);
   assert.equal(merged.id, first.id);
   assert.equal(merged.createdAt, first.createdAt);
   assert.ok(merged.updatedAt > first.updatedAt, 'updatedAt must refresh');
   assert.equal(merged.confidence, 0.9, 'confidence takes the maximum');
-  assert.equal(merged.text, '请记住：周会固定在每周五下午三点半。');
+  assert.equal(merged.text, '周会固定在每周五下午三点半。');
 });
 
 test('a merging automatic learn never trips the capacity limit', async t => {

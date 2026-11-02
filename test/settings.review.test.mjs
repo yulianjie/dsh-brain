@@ -19,18 +19,18 @@ test('explicit syncConfig barrier waits for an already-issued atomic commit to s
   };
   const handle = await createIntegration(ctx, options);
   const entered = Promise.withResolvers(), release = Promise.withResolvers();
-  const originalRename = fs.rename;
-  fs.rename = async (...args) => {
-    if (args[1] === handle.brain.file) { entered.resolve(); await release.promise; }
-    return originalRename(...args);
+  const originalCommit = handle.brain.store._commit.bind(handle.brain.store);
+  handle.brain.store._commit = async (...args) => {
+    entered.resolve(); await release.promise;
+    return originalCommit(...args);
   };
   t.after(async () => {
     release.resolve();
     for (const effect of effects) await effect();
-    fs.rename = originalRename;
+    handle.brain.store._commit = originalCommit;
     await fs.rm(dataDir, { recursive: true, force: true });
   });
-  handlers.get('agent/inbox/claimed')({ agent, turn: 1, message: { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '请记住合成测试标记 ORBIT。' }] } });
+  handlers.get('agent/inbox/claimed')({ agent, turn: 1, message: { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: '以后回答请简短一点。' }] } });
   handlers.get('session/event')(agent.session, { type: 'turn/end', seq: 1, data: { turn: 1, reason: { kind: 'completed' } } });
   await entered.promise;
   options.autoLearn = false;
@@ -39,7 +39,7 @@ test('explicit syncConfig barrier waits for an already-issued atomic commit to s
   // direct integrations can additionally await this explicit disposal barrier.
   const update = handle.syncConfig().then(() => { settled = true; });
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(settled, false, 'settings save returned while an already-issued filesystem commit remained in flight');
+  assert.equal(settled, false, 'settings save returned while an already-issued SQLite commit remained in flight');
   release.resolve(); await update;
   assert.equal(settled, true);
 });

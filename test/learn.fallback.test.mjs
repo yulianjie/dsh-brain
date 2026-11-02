@@ -72,12 +72,12 @@ test('model style feedback is still recorded', async t => {
   assert.ok(verbosity[0].value < 0.5);
 });
 
-test('explicit 请记住 memories still merge when the model returns nothing', async t => {
+test('an empty model result never persists raw 请记住 text', async t => {
   const { brain } = await fixture(t);
   await brain.learn({ sessionId: 'fallback-explicit', turnId: '1', userText: '请记住：我喜欢中文回答。', extraction: empty });
   const records = await brain.list();
-  assert.equal(records.length, 1);
-  assert.ok(records[0].text.includes('我喜欢中文回答'));
+  assert.equal(records.length, 0);
+  assert.equal((await brain.stats()).processedTurns, 0);
 });
 
 test('local style evidence does not hide a fact the model already explained', async t => {
@@ -88,7 +88,7 @@ test('local style evidence does not hide a fact the model already explained', as
     turnId: '1',
     userText,
     extraction: {
-      memories: [{ text: '我用 Windows', kind: 'fact', scope: 'global', confidence: 0.9, evidence: '我用 Windows' }],
+      memories: [{ text: '我用 Windows', kind: 'fact', scope: 'global', confidence: 0.9, evidence: '另外我用 Windows。' }],
       feedback: [{ trait: 'verbosity', value: 0.2, confidence: 0.9, evidence: '以后回答简短一点' }],
     },
   });

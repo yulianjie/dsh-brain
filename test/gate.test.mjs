@@ -11,10 +11,10 @@ import { validateExtraction } from '../lib/extraction.js';
 async function fixture(t) {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'dsh-brain-gate-'));
   t.after(() => rm(dataDir, { recursive: true, force: true }));
-  return { brain: await new Brain({ dataDir }).init() };
+  return { dataDir, brain: await new Brain({ dataDir }).init() };
 }
-const learn = (brain, turn, userText, extraction) =>
-  brain.learn({ sessionId: 'gate-synthetic', turnId: String(turn), userText, ...(extraction ? { extraction } : {}) });
+const learn = (brain, turn, userText, extraction, options = {}) =>
+  brain.learn({ sessionId: 'gate-synthetic', turnId: String(turn), userText, ...options, ...(extraction ? { extraction } : {}) });
 const memory = (evidence, extra = {}) => ({ text: evidence, evidence, kind: 'fact', scope: 'global', confidence: 0.9, ...extra });
 
 test('one-off CI state is rejected even at high model confidence and never reaches the store', async t => {
@@ -48,18 +48,19 @@ test('completed-status suffixes and English word forms stay rejected', () => {
 });
 
 test('explicit intent and durable cues exempt the whole containing sentence', async t => {
-  const { brain } = await fixture(t);
-  await learn(brain, 1, '请记住：github ci有问题', { memories: [memory('请记住：github ci有问题')] });
-  await learn(brain, 2, '以后ci有问题要先看Actions', { memories: [memory('以后ci有问题要先看Actions')] });
-  const records = await brain.list();
+  const { brain, dataDir } = await fixture(t);
+  const workspace = path.join(dataDir, 'workspace');
+  await learn(brain, 1, '请记住：github ci有问题', { memories: [memory('请记住：github ci有问题')] }, { workspace });
+  await learn(brain, 2, '以后ci有问题要先看Actions', { memories: [memory('以后ci有问题要先看Actions')] }, { workspace });
+  const records = await brain.list({ workspace });
   assert.equal(records.length, 2);
   assert.ok(records.some(r => r.text === '请记住：github ci有问题'), 'explicit 请记住 must win');
   assert.ok(records.some(r => r.text === '以后ci有问题要先看Actions'), 'a durable cue must win');
+  assert.ok(records.every(r => r.scope === 'workspace'));
 });
 
-test('the five keep samples from real usage stay untouched by the gate', () => {
+test('the durable samples from real usage stay untouched by the gate', () => {
   const samples = [
-    '我当前使用的是deepseek desktop',
     '请使用子agent评估',
     '修改需要在main分支完成，并且所有的修改请移动到main分支中，需要先同步远程main分支',
     '以后所有 GitHub 相关操作（查 Actions/CI 运行状态、Release、PR、Issue、仓库信息、调用 GitHub API 等）一律优先使用 gh 命令行工具（如 gh run list/view、gh release view/create、gh pr、gh api），不要改用网页抓取或 web_fetch 调 GitHub 接口。',
@@ -70,6 +71,30 @@ test('the five keep samples from real usage stay untouched by the gate', () => {
     assert.equal(result.memories.length, 1, text);
     assert.equal(result.rejected, 0, text);
   }
+});
+
+test('time-bound states and one-off branch commands do not enter durable memory', async t => {
+  const { brain, dataDir } = await fixture(t);
+  const workspace = path.join(dataDir, 'workspace');
+  const samples = [
+    '今天CI通过。',
+    '今天build通过。',
+    '部署完成。',
+    '部署到生产环境了。',
+    '请切换到 feature/login 分支。',
+    '我目前使用 PostgreSQL。',
+  ];
+  for (const [index, evidence] of samples.entries()) {
+    const result = await learn(brain, index + 1, evidence, { memories: [memory(evidence)] }, { workspace });
+    assert.equal(result.remembered.length, 0, evidence);
+    assert.equal(result.rejected, 1, evidence);
+  }
+  assert.deepEqual(await brain.list({ workspace }), []);
+
+  const durable = '请记住：本项目默认使用 pnpm。';
+  const saved = await learn(brain, 20, durable, { memories: [memory(durable)] }, { workspace });
+  assert.equal(saved.remembered.length, 1);
+  assert.equal((await brain.list({ workspace }))[0].text, durable);
 });
 
 test('style feedback in the same turn is not touched by the memory gate', () => {
@@ -84,12 +109,10 @@ test('style feedback in the same turn is not touched by the memory gate', () => 
   assert.equal(result.feedback[0].trait, 'verbosity');
 });
 
-test('fallback products (请记住 sentences and style sentences) still learn end to end', async t => {
+test('offline fallback learns explicit style feedback but never stores raw user text', async t => {
   const { brain } = await fixture(t);
   await learn(brain, 1, '请记住：我喜欢中文回答。');
   await learn(brain, 2, '以后回答请简短一点。');
-  const records = await brain.list();
-  assert.equal(records.length, 2);
-  assert.ok(records.some(r => r.text === '请记住：我喜欢中文回答。'));
-  assert.ok(records.some(r => r.key === 'style:verbosity'));
+  assert.deepEqual(await brain.list(), []);
+  assert.equal((await brain.personality()).evidenceCounts.verbosity, 1);
 });

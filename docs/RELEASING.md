@@ -10,10 +10,11 @@ Publish the same tarball to GitHub and npm; do not rebuild independently afterwa
 `v<version>` tag is pushed. The tag must match `package.json` and have a
 `## <version>` section in `CHANGELOG.md`. The workflow runs `npm ci`,
 `npm run verify` and `git diff --check`, packs the tarball, writes
-`SHA256SUMS.txt`, attaches both files to the matching GitHub release, publishes
-that exact tarball to npm, then re-downloads both the GitHub release asset and
-the registry tarball to confirm the checksums match, retrying while the
-registry makes a fresh version visible. Prerelease versions (containing `-`)
+`SHA256SUMS.txt`, checks the npm publishing identity before exposing assets, attaches both files
+to a draft GitHub release, publishes that exact tarball to npm, then re-downloads
+both the GitHub release asset and the registry tarball to confirm the checksums
+match. It publishes the GitHub draft only after verification succeeds, retrying
+while the registry makes a fresh version visible. Prerelease versions (containing `-`)
 publish under the `next` dist-tag so `latest` is untouched. A version already
 on npm is only verified, never rebuilt or replaced, so re-running a release
 workflow is safe.

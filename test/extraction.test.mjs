@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containsCredential, validateExtraction, extractExplicitPreferences } from '../lib/extraction.js';
+import { containsCredential, validateExtraction, extractExplicitPreferences, semanticPreferenceKey } from '../lib/extraction.js';
 
 test('credential recognition covers keys, authorization, private keys, passwords and URL credentials', () => {
   for (const text of ['sk-synthetic1234567890123456', 'ghp_synthetic1234567890123456', 'Bearer abcdefghijklmnopqrst', 'password=syntheticsecret', '密码：syntheticsecret', 'https://name:secret@example.invalid', '-----BEGIN RSA PRIVATE KEY-----']) assert.equal(containsCredential(text), true, text);
@@ -13,19 +13,24 @@ test('offline preferences support Chinese, English and negative requests', () =>
   assert.equal(extractExplicitPreferences('请不要开玩笑。').feedback.find(f => f.trait === 'humor').value, 0.1);
   assert.equal(extractExplicitPreferences('语气不要太正式。').feedback.find(f => f.trait === 'formality').value, 0.15);
   assert.equal(extractExplicitPreferences('请不要主动建议。').feedback.find(f => f.trait === 'proactivity').value, 0.1);
+  assert.equal(extractExplicitPreferences('以后回答不要总是主动建议。').feedback.find(f => f.trait === 'proactivity').value, 0.1);
 });
 
 test('transient requests, quoted examples, assistant claims and demographics do not create style evidence', () => {
-  for (const text of ['这次请简短回答。', 'Please keep this answer brief this time.', '他说：“以后回答请简短一点。”', '"Please keep replies concise."', '我是中国人，三十岁。', '助手说希望用户的回复简短。']) assert.equal(extractExplicitPreferences(text).feedback.length, 0, text);
+  for (const text of ['这次请简短回答。', '今天请回答简短一点。', '现在请回答简短一点。', '目前请回答简短一点。', '暂时请回答简短一点。', 'Please keep this answer brief this time.', 'Today, keep replies concise.', '他说：“以后回答请简短一点。”', '"Please keep replies concise."', '我是中国人，三十岁。', '助手说希望用户的回复简短。']) assert.equal(extractExplicitPreferences(text).feedback.length, 0, text);
 });
 
-test('model extraction requires literal current user evidence and stores original statement', () => {
+test('model extraction stores a faithful model summary with independent full-sentence evidence', () => {
   const userText = '本项目用 Rust。';
-  const valid = validateExtraction({ userText, extraction: { memories: [{ text: 'Invented unsupported summary', kind: 'fact', scope: 'global', confidence: 0.9, evidence: userText }], feedback: [{ trait: 'verbosity', value: 0, confidence: 0.9, evidence: 'not in user turn' }] } });
-  assert.equal(valid.memories[0].text, userText);
+  const valid = validateExtraction({ userText, workspaceAvailable: true, extraction: { memories: [{ text: 'This project uses Rust.', kind: 'fact', scope: 'global', confidence: 0.9, evidence: userText }], feedback: [{ trait: 'verbosity', value: 0, confidence: 0.9, evidence: 'not in user turn' }] } });
+  assert.equal(valid.memories[0].text, 'This project uses Rust.');
+  assert.equal(valid.memories[0].evidence, userText);
   assert.equal(valid.memories[0].scope, 'workspace');
   assert.equal(valid.feedback.length, 0);
   assert.equal(valid.rejected, 1);
+  const invented = validateExtraction({ userText, extraction: { memories: [{ text: 'The project is headquartered in Tokyo.', kind: 'fact', scope: 'global', confidence: 1, evidence: userText }] } });
+  assert.equal(invented.memories.length, 0);
+  assert.equal(invented.rejected, 1);
 });
 
 test('semantic model feedback can recognize ordinary feedback beyond deterministic phrases', () => {

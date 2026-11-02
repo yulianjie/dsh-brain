@@ -164,9 +164,9 @@ test('dream: 损坏或缺失的存储给出可操作错误而不是 SyntaxError'
   const brain = await new Brain({ dataDir }).init();
   await brain.remember({ text: '用户要求称呼为船长', scope: 'global' });
   await writeFile(brain.file, '{not json', 'utf8');
-  assert.throws(() => brain.dreamPlan(), /Invalid or corrupt Brain state/);
+  assert.throws(() => brain.dreamPlan(), /Invalid or corrupt Brain/);
   await rm(brain.file);
-  assert.throws(() => brain.dreamPlan(), /Brain store is missing/);
+  assert.throws(() => brain.dreamPlan(), /Brain (?:SQLite )?store is missing/);
 });
 
 test('预算：窄预算下记忆优先于风格段，绝不出现"只有风格没有记忆"', async t => {

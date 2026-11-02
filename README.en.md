@@ -15,67 +15,81 @@ currently a 0.x project targeting a specific prerelease host API.
 
 ## What it does
 
-- Extracts durable information from completed root-agent user turns, with literal
-  source evidence, write-time merging of similar memories, a minimum-signal gate
-  that keeps transient task state out, bounded queues and conservative offline fallback.
+- Extracts durable information from completed root-agent user turns. Automatic
+  memory text is a model-organized summary; separate original evidence is retained
+  for validation and traceability and is not injected into conversations.
 - Retrieves global preferences and facts for the current workspace using English
   tokens and Chinese bigrams. No vector database or separate memory server is needed.
 - Adjusts warmth, verbosity, humor, proactivity and formality gradually, with manual
   overrides, freeze/reset, history and rollback.
 - Provides 23 native Desktop settings, `/brain` commands, six model tools and a
   standalone management CLI.
-- Stores inspectable JSON with atomic replacement, cross-process write locking,
-  import/export and deletion markers that resist resurrection from old backups.
+- Stores data in SQL tables in `<dataDir>/brain.sqlite`, using built-in
+  `node:sqlite` and transactions. JSON schemaVersion 1 import/export remains available.
 
 ## Requirements and compatibility
 
 | Component | Scope |
 | --- | --- |
-| Core and management CLI | Node.js 22+; CI tests Node 22/24 on Windows, Linux and macOS |
-| Desktop integration | Windows Desktop **bundled runtime 0.2.1-rc.3** |
+| Core and management CLI | Node.js >=22.13; CI matrix targets Node 22/24 on Windows, Linux and macOS |
+| Desktop integration | Local bundled runtime 0.2.1-rc.5 (Electron 44.7.0, Node 24.21.0); runtime smoke passed |
 | Installation scripts | Windows PowerShell and Desktop's bundled CLI |
 | Native UI and CLI help | Currently Chinese; commands and configuration keys are stable identifiers |
 
-Core CI coverage does not establish native Desktop support on Linux/macOS.
-Other host versions need separate verification. The package version is **0.5.0**.
+The package version is **0.6.0** and requires Node.js >=22.13, which can import
+built-in `node:sqlite` without a startup flag. The minimum Node.js 22.13.0 Windows
+binary, local Node.js 24.14.1 and Desktop's bundled Node.js 24.21.0 were checked.
+The local Desktop smoke passed on bundled runtime 0.2.1-rc.5 using a synthetic
+provider adapter; it was not an online LLM quality evaluation. Core CI coverage
+does not establish native Desktop support on Linux/macOS. See the
+[0.6.0 verification record](docs/releases/v0.6.0.md).
+
+### Remote release verification (status at this source snapshot)
+
+When this source snapshot was prepared, local source, package-install and Desktop
+runtime checks were complete; final-tag GitHub CI, GitHub Release assets, npm
+publication and registry tarball verification were pending the release workflow.
+The [0.6.0 verification record](docs/releases/v0.6.0.md) and GitHub Actions have
+the final status. The installation commands below target 0.6.0 and can be used
+after the release workflow publishes the package.
 
 ## Install
 
 The official package name is **`@yulianjie/dsh-brain`**. The unscoped npm name
 `dsh-brain` belongs to another project. The management command remains `dsh-brain`.
 
-### From npm
+### From npm (after publication)
 
 Use Desktop's bundled CLI, not an unrelated global DSH installation:
 
 ```powershell
 $dshCli = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd'
-& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.5.0'
+& $dshCli plugin --profile desktop add '@yulianjie/dsh-brain@0.6.0'
 ```
 
 To install only the standalone management CLI, run
-`npm install -g @yulianjie/dsh-brain@0.5.0`, then `dsh-brain --help`.
+`npm install -g @yulianjie/dsh-brain@0.6.0`, then `dsh-brain --help`.
 This global CLI installation does not register the Desktop plugin.
 
-### From GitHub Release
+### From GitHub Release (after publication)
 
-Download `yulianjie-dsh-brain-0.5.0.tgz` and `SHA256SUMS.txt` from
-[v0.5.0](https://github.com/yulianjie/dsh-brain/releases/tag/v0.5.0) into one directory:
+Download `yulianjie-dsh-brain-0.6.0.tgz` and `SHA256SUMS.txt` from
+[v0.6.0](https://github.com/yulianjie/dsh-brain/releases/tag/v0.6.0) into one directory:
 
 ```powershell
 $expected = ((Get-Content .\SHA256SUMS.txt -Raw).Trim() -split '\s+')[0]
-$actual = (Get-FileHash .\yulianjie-dsh-brain-0.5.0.tgz -Algorithm SHA256).Hash
+$actual = (Get-FileHash .\yulianjie-dsh-brain-0.6.0.tgz -Algorithm SHA256).Hash
 if ($actual -ne $expected) { throw 'SHA256 mismatch' }
-tar -xf .\yulianjie-dsh-brain-0.5.0.tgz
-.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz
+tar -xf .\yulianjie-dsh-brain-0.6.0.tgz
+.\package\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.6.0.tgz
 ```
 
 Installation still downloads dependencies; the tarball does not bundle `node_modules`.
 
 ### From source
 
-Install the target Desktop version, Git and Node.js/npm first. No compilation is
-needed. Dependencies are downloaded from the npm registry.
+Install the target Desktop version, Git and Node.js >=22.13/npm first. No compilation
+is needed. Dependencies are downloaded from the npm registry.
 
 ```powershell
 git clone https://github.com/yulianjie/dsh-brain.git
@@ -83,7 +97,7 @@ cd dsh-brain
 npm.cmd ci
 npm.cmd run verify
 npm.cmd pack
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.6.0.tgz
 ```
 
 Restart Desktop normally. Open the installed `@yulianjie/dsh-brain` plugin and run
@@ -93,7 +107,7 @@ Use `-DshCli <path>` for another installation, `-Profile` for another profile,
 `-DshHome` for an isolated home, and `-DryRun` to inspect the intended operation.
 
 ```powershell
-.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.5.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
+.\scripts\install.ps1 -PackagePath .\yulianjie-dsh-brain-0.6.0.tgz -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 .\scripts\uninstall.ps1 -DshHome "$env:TEMP\dsh-brain-demo" -Profile brain-test
 ```
 
@@ -111,13 +125,19 @@ install the scoped package and restart Desktop normally. Do not install the
 unrelated unscoped package from npm. The installer refuses a profile still depending
 on the old unscoped name to avoid duplicate `brain` entries.
 
-Keep the same `DSH_HOME` and `dataDir`. The plugin row ID `brain`, data path and
-schemaVersion=1 are unchanged; memory, learned style, history and row configuration
-overrides are retained. Installation does not stop Desktop or delete the store.
+Keep the same `DSH_HOME` and `dataDir`. Version 0.6.0 keeps the plugin row ID
+`brain`, `dataDir` and JSON import/export `schemaVersion: 1`. On first startup it
+imports an existing `brain.json` into `<dataDir>/brain.sqlite` in a transaction and
+preserves the original JSON unchanged as a backup. Existing memory text is not sent
+to an LLM for rewriting. The migration does not delete the source JSON or stop
+Desktop. The default 500-memory limit remains in effect.
 
 ## Everyday use
 
-Say “Please remember: I prefer replies in English”, or use explicit commands:
+When the extraction model is available, say “Please remember: I prefer replies
+in English”. Without an available model, automatic learning does not save the raw
+turn as a memory; use `/brain remember` or CLI `remember` to save text directly.
+Other explicit commands include:
 
 ```text
 /brain remember global I prefer replies in English
@@ -140,10 +160,11 @@ Say “Please remember: I prefer replies in English”, or use explicit commands
 Prefix each command with `/brain`. An omitted `remember` scope uses the current
 session workspace when available, otherwise global. Model tools are `brain_search`,
 `brain_list`, `brain_read`, `brain_remember`, `brain_forget` and `brain_personality`.
-Similar memories in the same scope — including model-tool writes — merge into the
-existing record instead of creating a duplicate; `brain_remember` reports that with
-`merged:true`. Import/export and destructive style controls are reserved for user
-commands or the local CLI.
+Child agents retain the read-only search/list/read/personality tools. Only the root
+agent may use memory write/forget tools or `/brain` mutation commands. Similar
+memories in the same scope merge into the existing record instead of creating a
+duplicate; `brain_remember` reports that with `merged:true`. Import/export and
+destructive style controls are reserved for user commands or the local CLI.
 
 Automatic learning does not scan old conversations or import another agent's
 memory. It ignores assistant text, tool output and subagent turns. Workspace
@@ -172,11 +193,13 @@ memories however large the store (a long phrase whose parts are each rare in
 different memories can bring a few more); a single-concept question in a large
 store brings the best three, and the model can call `brain_search` for the
 rest. A few words, such as 确认 or 酒吧, are stopwords
-or contain a particle and cannot trigger recall on their own. Memories already
-shown in a conversation stay until new strong matches push them out under the
-count or budget limit, so tool-call steps and contentless turns keep the same
-selection; unrelated global preferences still use at most about a third of the
-token budget. Subagents get no Brain reference, so they also miss global
+or contain a particle and cannot trigger recall on their own. Contentless turns
+reuse the current references, so tool-call steps keep the same selection. On a
+topic-bearing turn, current matches must pass the relevance floor; a strong
+current topic removes history-only old references. A weak candidate can bridge a
+continuation when it shares recent user-history evidence with the current topic.
+History cannot introduce a memory or raise the relevance floor. Unrelated global
+preferences still use at most about a third of the token budget. Subagents get no Brain reference, so they also miss global
 preferences such as the code-comment language: the parent agent has to pass
 them on, or the subagent can call `brain_search`. Each injected memory says
 `from` (`this chat`, `earlier chat`, `saved by user`, `saved by assistant` or
@@ -237,27 +260,34 @@ configuration remains in the profile patch, outside the UI.
 | `maxContextChars`, `maxContextMemories` | `6000` total context characters, `10` recalled records |
 | `maxContextTokens` | `2000` estimated tokens; 0 disables automatic injection |
 | `maxToolResultChars`, `maxToolResultTokens` | `6000` characters / `2000` estimated tokens per tool page |
-| `lockTimeoutMs` | `15000` milliseconds |
+| `lockTimeoutMs` | `15000` milliseconds waiting on SQLite write contention |
 
 The full ranges and patch examples are in the [Chinese configuration reference](README.md#配置与存储).
 Only one extraction call runs at a time, with at most one attempt per turn. Queue
-overflow drops new tasks; timeouts use local explicit-preference extraction, and
-that local heuristic is the fallback only: when the extraction model answers,
-style is learned solely from its source-backed feedback. An
-uncooperative provider occupies the model slot until it settles. Disabling learning
-cancels waiting/in-flight extraction; an atomic commit already issued cannot be undone.
+overflow drops new tasks. If the model is unavailable, the plugin does not
+automatically save the user's raw turn as a memory; local rules may only provide
+limited fallback for numeric style feedback. Explicit `/brain remember` and CLI
+`remember` still save the text the user directly supplies. An uncooperative
+provider occupies the model slot until it settles. Disabling learning cancels
+waiting/in-flight extraction; a database transaction already issued cannot be undone.
 
-Data lives at `$DSH_HOME/brain/brain.json`, or `~/.dsh/brain/brain.json` without
-`DSH_HOME`. Profiles with the same default home share global memories and style.
-Set different `dataDir` values when they must be separated. Corrupt or unsupported
-data causes an error and is preserved. Do not remove a lock while its writer lives.
-A same-host `.brain.lock` left by a crashed process is reclaimed automatically after
-its pid is confirmed gone; other cases still require manual cleanup.
+Data lives at `$DSH_HOME/brain/brain.sqlite`, or `~/.dsh/brain/brain.sqlite`
+without `DSH_HOME`. Profiles with the same default home share global memories and
+style. Set different `dataDir` values when they must be separated. First startup
+in 0.6.0 imports an existing `brain.json` and preserves the original JSON unchanged
+as a backup; it does not call an LLM to rewrite historical text. SQLite transactions
+protect updates. Keep the database and any SQLite sidecar files together when
+backing up, and do not copy a database while it is being written. Corrupt or
+unsupported databases are reported and preserved. The database is plaintext, not
+encrypted. Empty extractions are not recorded as processed turns; only the latest
+4096 processed turns are kept, so idempotency is not guaranteed after an old turn
+leaves that window. Deletion hashes are retained permanently to stop old backups
+from restoring forgotten memories, and normal memory recall does not read these ledgers.
 
 ## Management CLI
 
 Use the source CLI, or install the local tarball globally with
-`npm install -g ./yulianjie-dsh-brain-0.5.0.tgz` to obtain `dsh-brain`. Use a matching
+`npm install -g ./yulianjie-dsh-brain-0.6.0.tgz` to obtain `dsh-brain`. Use a matching
 `--data-dir` to manage the same store as Desktop. Except help, successful commands
 return JSON; errors go to stderr with a nonzero exit status.
 
@@ -274,15 +304,21 @@ CLI `remember` defaults to global; `--scope workspace` requires `--workspace`.
 also supports `update`, `import`, `freeze`, `unfreeze`, `reset`, `history` and
 `rollback`. Export includes all workspaces, deletion markers and history; existing
 files require `--force`. Import merges validated data and deletion/deduplication
-markers while retaining the current style. See [all CLI examples](README.md#本地管理-cli).
+markers while retaining the current style. The interchange format remains JSON
+`schemaVersion: 1`; the default maximum of 500 memories still applies. See
+[all CLI examples](README.md#本地管理-cli).
 
 ## Privacy and limits
 
-Local storage is **plaintext**, not encrypted. Automatic extraction sends current
-user text through the configured host model, and recalled memories are included in
-later model context. This can incur provider charges. Disable `autoLearn` to stop
-automatic extraction; injection has separate switches. There is no separate
-memory upload service.
+Local SQLite storage is **plaintext**, not encrypted. When the extraction model is
+available, automatic memory text is a model-organized summary. The original source
+evidence is stored separately for checking and traceability; it is not injected
+into conversations. Automatic extraction sends current user text through the
+configured host model, and recalled memory summaries enter later model context.
+This can incur provider charges. If the model is unavailable, raw user text is not
+automatically saved as a memory. Explicit `/brain remember` and CLI `remember`
+remain direct text-entry paths. Disable `autoLearn` to stop automatic extraction;
+injection has separate switches. There is no separate memory upload service.
 
 Credential filtering is heuristic and cannot identify every secret. Do not save
 credentials or publish exports. Retrieval is lexical, not semantic vector search;
@@ -302,9 +338,12 @@ npm run test:runtime
 ```
 
 `verify` checks syntax, local documentation links, tests and a clean installation
-of the real tarball using synthetic data. CI runs on Node 22/24 across three OSes.
-Runtime smoke uses actual bundled host services and a controlled synthetic provider;
-it does not call a real network model or validate a native window.
+of the package tarball using synthetic data. The local 0.6.0 package was installed
+through Desktop's bundled CLI; normal restart activation is pending. Runtime
+smoke passed with the local 0.2.1-rc.5 bundled runtime and a synthetic provider
+adapter; it did not call a real network model or evaluate LLM quality. The
+tag-triggered CI and remote publication checks are tracked separately in the
+[0.6.0 verification record](docs/releases/v0.6.0.md).
 
 [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) ·
 [Architecture (Chinese)](docs/DESIGN.zh-CN.md) · [Validation (Chinese)](docs/VALIDATION.zh-CN.md) ·

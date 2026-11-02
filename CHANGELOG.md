@@ -1,6 +1,45 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
+
+- Replace the persistent JSON file with SQL tables and transactions in
+  `<dataDir>/brain.sqlite`, using Node's built-in `node:sqlite` (Node.js >=22.13).
+  No npm SQLite/native dependency was added. On first startup, an existing
+  `brain.json` is imported transactionally and the original JSON is preserved
+  byte-for-byte as a backup. Historical memory text is not re-sent to an LLM for
+  rewriting. JSON import/export remains `schemaVersion: 1`, with the default
+  500-memory limit retained.
+- Automatic memory bodies now use model-organized summaries. Original user text
+  is stored as separate evidence for validation and traceability and is not
+  injected into model context. If the extraction model is unavailable, automatic
+  learning no longer saves the raw turn as a memory; limited numeric style
+  feedback can still use the local fallback. Explicit `/brain remember` and CLI
+  `remember` continue to save directly supplied text.
+- Correct style extraction for negated and temporary feedback; prevent incorrect
+  global-scope labeling and duplicate writes; allow `updateOf` to apply shorter
+  corrections; separate semantic keys for language preferences; remove unrelated
+  history-only references on a strong topic switch while allowing a weak continuation
+  to bridge through shared recent history; and preserve prompt-prefix cache behavior.
+- Scope source-evidence replay tombstones by stable property key, so deleting one
+  claim backed by a sentence does not suppress a sibling claim using the same
+  evidence during backup import. Without a stable key, forget relies on record/text
+  identity and does not promise to recognize every paraphrased replay.
+- Restrict memory writes and forget operations to the root agent. Child agents
+  retain read-only `brain_search`, `brain_list`, `brain_read` and `brain_personality`
+  tools; they do not receive an injected Brain reference.
+- Include the cross-conversation isolation fix already present at the source
+  baseline: subagents do not receive unrelated Brain references.
+- Keep turn idempotency bounded: empty extractions are not recorded, and only the
+  most recent 4096 processed turns are retained, so idempotency is not guaranteed
+  after an older turn falls outside that window. Deletion hashes remain stored
+  permanently to prevent old backups from resurrecting forgotten memories; normal
+  recall does not read the ledgers.
+- Local Desktop runtime smoke passed against 0.2.1-rc.5 using a synthetic provider
+  adapter; it was not an online LLM quality evaluation. Tag-triggered CI, GitHub
+  release assets and npm registry verification are recorded in the
+  [0.6.0 verification record](docs/releases/v0.6.0.md).
+
+### Retrieval and session isolation details
 
 - Subagents no longer receive a Brain reference. `contextFor()` returns `''`
   for non-root agents, and `agent/pre-step` and `agent/request` return their
@@ -13,6 +52,9 @@
   no retirement of a reference, while the request itself proceeds; a user
   message claimed, or a turn ended, while the lookup fails is not learned.
   Only a lookup that succeeds and excludes the agent takes the non-root path.
+- Read-only memory tools remain available to child agents. `brain_remember`,
+  `brain_forget` and `/brain` mutation commands require a confirmed root agent;
+  an unavailable root lookup rejects the mutation.
 - Automatic injection selects memories by relevance instead of raw term
   counts. The new pure module `lib/relevance.js` scores eligible visible
   memories with BM25 over binary term frequency (`K1 = 1.2`, `B = 0.75`) on the
